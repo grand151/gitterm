@@ -31,9 +31,11 @@
     "db:start": "turbo -F @gitpad/db db:start",
     "db:watch": "turbo -F @gitpad/db db:watch",
     "db:stop": "turbo -F @gitpad/db db:stop",
-    "db:down": "turbo -F @gitpad/db db:down"
+    "db:down": "turbo -F @gitpad/db db:down",
+    "db:seed": "turbo -F @gitpad/db db:seed"
   },
   "dependencies": {
+    "date-fns": "^4.1.0",
     "dotenv": "^17.2.2",
     "zod": "^4.1.11"
   },

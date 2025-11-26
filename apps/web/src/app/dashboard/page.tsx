@@ -1,25 +1,16 @@
-import { redirect } from "next/navigation";
-import Dashboard from "./dashboard";
-import { headers } from "next/headers";
-import { authClient } from "@/lib/auth-client";
+import { DashboardHeader, DashboardShell } from "@/components/dashboard/shell";
+import { InstanceList } from "@/components/dashboard/instance-list";
+import { CreateInstanceDialog } from "@/components/dashboard/create-instance-dialog";
 
-export default async function DashboardPage() {
-	const session = await authClient.getSession({
-		fetchOptions: {
-			headers: await headers(),
-			throw: true,
-		},
-	});
-
-	if (!session?.user) {
-		redirect("/login");
-	}
-
-	return (
-		<div>
-			<h1>Dashboard</h1>
-			<p>Welcome {session.user.name}</p>
-			<Dashboard session={session} />
-		</div>
-	);
+export default function DashboardPage() {
+  return (
+    <DashboardShell>
+      <DashboardHeader heading="Dashboard" text="Manage your development workspaces.">
+        <CreateInstanceDialog />
+      </DashboardHeader>
+      <div className="grid gap-8">
+        <InstanceList />
+      </div>
+    </DashboardShell>
+  );
 }

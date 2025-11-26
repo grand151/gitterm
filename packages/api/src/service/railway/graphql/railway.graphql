@@ -1,0 +1,150 @@
+# ============================================================================
+# Queries
+# ============================================================================
+
+query Me {
+  me {
+    id
+    email
+    name
+    avatar
+  }
+}
+
+query Project($id: String!) {
+  project(id: $id) {
+    id
+    name
+    description
+    createdAt
+    updatedAt
+    services {
+      edges {
+        node {
+          id
+          name
+          icon
+          createdAt
+          updatedAt
+        }
+      }
+    }
+    environments {
+      edges {
+        node {
+          id
+          name
+        }
+      }
+    }
+  }
+}
+
+query Projects {
+  projects {
+    edges {
+      node {
+        id
+        name
+        description
+        createdAt
+        updatedAt
+      }
+    }
+  }
+}
+
+query Service($id: String!) {
+  service(id: $id) {
+    id
+    name
+    icon
+    createdAt
+    updatedAt
+  }
+}
+
+query Environments($projectId: String!) {
+  environments(projectId: $projectId) {
+    edges {
+      node {
+        id
+        name
+      }
+    }
+  }
+}
+
+query Deployments($input: DeploymentListInput!, $first: Int) {
+  deployments(input: $input, first: $first) {
+    edges {
+      node {
+        id
+        status
+        createdAt
+        environmentId
+      }
+    }
+  }
+}
+
+# ============================================================================
+# Mutations
+# ============================================================================
+
+mutation ServiceCreate($input: ServiceCreateInput!) {
+  serviceCreate(input: $input) {
+    id
+    name
+    icon
+    createdAt
+    updatedAt
+    project {
+      baseEnvironmentId
+    }
+  }
+}
+
+mutation ServiceDelete($id: String!) {
+  serviceDelete(id: $id)
+}
+
+mutation ServiceUpdate($id: String!, $input: ServiceUpdateInput!) {
+  serviceUpdate(id: $id, input: $input) {
+    id
+    name
+    icon
+    updatedAt
+  }
+}
+
+mutation DeploymentRedeploy($id: String!) {
+  deploymentRedeploy(id: $id) {
+    id
+    status
+    createdAt
+  }
+}
+
+mutation TcpProxyCreate($input: TCPProxyCreateInput!) {
+  tcpProxyCreate(input: $input) {
+    id
+    applicationPort
+    environmentId
+    domain
+    proxyPort
+    serviceId
+    createdAt
+    updatedAt
+  }
+}
+
+mutation ServiceDomainCreate($input: ServiceDomainCreateInput!) {
+  serviceDomainCreate(input: $input) {
+    id
+    domain
+    serviceId
+    createdAt
+    updatedAt
+  }
+}
