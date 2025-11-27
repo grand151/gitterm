@@ -5,6 +5,7 @@ import { db, eq, and } from "@gitpad/db";
 import { workspace, agentWorkspaceConfig, workspaceEnvironmentVariables } from "@gitpad/db/schema/workspace";
 import { image } from "@gitpad/db/schema/cloud";
 import { TRPCError } from "@trpc/server";
+import { randomUUID } from "crypto";
 
 const PROJECT_ID = process.env.RAILWAY_PROJECT_ID;
 
@@ -28,6 +29,8 @@ export const railwayRouter = router({
     .mutation(async ({ input, ctx }) => {
       console.log("createService input:", input);
       const userId = ctx.session.user.id;
+      const workspaceId = randomUUID();
+      const subdomain = `ws-${workspaceId}`;
 
       try {
         // Fetch image details
@@ -71,7 +74,7 @@ export const railwayRouter = router({
         const { serviceCreate } = await railway.ServiceCreate({
           input: {
             projectId: PROJECT_ID,
-            name: input.name,
+            name: subdomain, // Use subdomain as service name for predictable internal DNS
             source: {
               image: imageRecord.imageId,
             },
@@ -80,36 +83,29 @@ export const railwayRouter = router({
         }).catch((error) => {
           console.error("Railway API Error:", error);
           throw new Error(`Railway API Error: ${error.message}`);
-        })
+        });
 
-        const { serviceDomainCreate } = await railway.ServiceDomainCreate({
-          input: {
-            environmentId: "f9691d36-157e-4e1c-ac3b-96fe1a121f6a", // TODO: Replace with actual base environment ID
-            serviceId: serviceCreate.id,
-            targetPort: 7681,
-          },
-        }).catch((error) => {
-          console.error("Railway API Error:", error);
-          throw new Error(`Railway API Error: ${error.message}`);
-        })
-
-        console.log("serviceDomainCreate:", serviceDomainCreate);
+        // Construct internal backend URL (assuming Railway Private Networking)
+        // Service name is used as the hostname. Port 7681 is ttyd default.
+        const backendUrl = `http://${subdomain}.railway.internal:7681`;
 
         const [newWorkspace] = await db.insert(workspace).values({
+          id: workspaceId,
           userId,
           externalInstanceId: serviceCreate.id,
           imageId: input.imageId,
           cloudProviderId: input.cloudProviderId,
           region: input.region,
           repositoryUrl: input.repo,
-          domain: serviceDomainCreate.domain,
+          subdomain: subdomain,
+          backendUrl: backendUrl,
+          domain: `${subdomain}.gitpad.com`, // This domain will be handled by the wildcard proxy
           status: "pending",
           startAt: new Date(serviceCreate.createdAt),
         }).returning();
 
         return {
-          workspace: newWorkspace,
-          serviceDomain: serviceDomainCreate.domain,
+          workspace: newWorkspace
         };
       } catch (error) {
         console.error("createService failed:", error);

@@ -11,7 +11,9 @@ export const workspace = pgTable("workspace", {
 	cloudProviderId: uuid("cloud_provider_id").notNull().references(() => cloudProvider.id, { onDelete: "cascade" }),
 	region: text("region").notNull(),
     repositoryUrl: text("repository_url"),
-    domain: text("domain"),
+    domain: text("domain"), // Full domain: ws-123.gitpad.com
+    subdomain: text("subdomain").unique(), // ws-123
+    backendUrl: text("backend_url"), // Internal URL
     status: workspaceStatusEnum("status").notNull(),
 	startAt: timestamp("start_at").notNull(),
 	endAt: timestamp("end_at"),

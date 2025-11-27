@@ -1,0 +1,3 @@
+- Authentication on the Terminal UI
+- Handling and Noticing GIT operations (user pushing to their own repo -> changing remote)
+- Scheduling deletion of service if not being used.

@@ -24,6 +24,7 @@
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
+    "dev:proxy": "turbo -F proxy dev:ngrok",
     "db:push": "turbo -F @gitpad/db db:push",
     "db:studio": "turbo -F @gitpad/db db:studio",
     "db:generate": "turbo -F @gitpad/db db:generate",

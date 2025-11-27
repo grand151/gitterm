@@ -1,0 +1,25 @@
+{
+  "name": "proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "dev:ngrok": "bun run --hot src/index.ts && ngrok http 4000",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@gitpad/db": "workspace:*",
+    "@gitpad/auth": "workspace:*",
+    "hono": "^4.0.0",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.30.10",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5",
+    "@gitpad/config": "workspace:*"
+  }
+}

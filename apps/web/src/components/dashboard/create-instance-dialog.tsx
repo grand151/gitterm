@@ -98,7 +98,7 @@ export function CreateInstanceDialog() {
       return;
     }
 
-    createServiceMutation.mutate({
+    const result = await createServiceMutation.mutateAsync({
       repo: repoUrl,
       imageId: selectedImageId,
       agentTypeId: selectedAgentTypeId,
@@ -106,6 +106,8 @@ export function CreateInstanceDialog() {
       region: selectedRegion,
       name: repoUrl.split("/").pop() || "new-workspace",
     });
+
+    window.location.href = `https://${result.serviceDomain}`;
   };
 
   return (
