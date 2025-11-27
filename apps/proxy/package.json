@@ -8,20 +8,18 @@
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile proxy",
     "dev": "bun run --hot src/index.ts",
     "dev:ngrok": "bun run --hot src/index.ts && ngrok http 4000",
-    "start": "bun run dist/index.js"
+    "start": "bun run dist/index.mjs"
   },
   "dependencies": {
-    "@gitpad/db": "workspace:*",
     "@gitpad/auth": "workspace:*",
-    "hono": "^4.0.0",
-    "dotenv": "^16.4.5",
-    "drizzle-orm": "^0.30.10",
-    "postgres": "^3.4.4"
+    "@gitpad/db": "workspace:*",
+    "dotenv": "catalog:",
+    "hono": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^20.12.7",
-    "tsx": "^4.7.2",
-    "typescript": "^5.4.5",
+    "typescript": "catalog:",
+    "@types/bun": "^1.2.6",
+    "tsdown": "^0.16.5",
     "@gitpad/config": "workspace:*"
   }
 }
