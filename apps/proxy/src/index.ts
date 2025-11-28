@@ -206,27 +206,37 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       secure: false,
     });
 
-    // Add auth and forwarding headers
+    // Add forwarding headers
     proxy.on("proxyReq", (proxyReq: any) => {
-      proxyReq.setHeader("X-Auth-User", userId);
       proxyReq.setHeader("X-Forwarded-For", req.socket.remoteAddress);
       proxyReq.setHeader("X-Forwarded-Proto", "https");
       proxyReq.setHeader("X-Forwarded-Host", host);
-      console.log(`[${ws.id}] WebSocket proxyReq headers set`);
     });
 
-    // Handle errors
+    // Handle errors from proxy
     proxy.on("error", (error: any) => {
       console.error(`[${ws.id}] WebSocket proxy error:`, error);
       socket.destroy();
     });
 
-    proxy.on("proxyRes", () => {
-      console.log(`[${ws.id}] WebSocket proxyRes received`);
+    // Handle socket errors
+    socket.on("error", (error: any) => {
+      console.error(`[${ws.id}] Socket error:`, error);
+    });
+
+    // Keep connection alive with pings
+    const keepAliveInterval = setInterval(() => {
+      if (socket.writable) {
+        socket.ping();
+      }
+    }, 30000);
+
+    socket.on("close", () => {
+      clearInterval(keepAliveInterval);
+      console.log(`[${ws.id}] WebSocket closed`);
     });
 
     // Forward WebSocket upgrade
-    console.log(`[${ws.id}] Starting WebSocket proxy...`);
     proxy.ws(req, socket, head);
   } catch (error) {
     console.error("WebSocket upgrade error:", error);
