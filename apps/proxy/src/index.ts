@@ -129,8 +129,8 @@ app.use("*", async (c: Context, next: any) => {
   await next();
 });
 
-// WebSocket handler for ttyd
-app.get("*", async (c: Context) => {
+// Main handler: proxy all requests to backend
+app.all("*", async (c: Context) => {
   const upgrade = c.req.header("upgrade");
   
   // Check if this is a WebSocket upgrade request
@@ -170,13 +170,7 @@ app.get("*", async (c: Context) => {
       return c.text("WebSocket Gateway Error", 502);
     }
   }
-  
-  // Not a WebSocket request, pass to next handler
-  return undefined;
-});
-
-// Main handler: proxy all requests to backend
-app.all("*", async (c: Context) => {
+  // Regular HTTP/HTTPS request (not WebSocket)
   const backendUrl = c.get("backendUrl") as string;
   const workspaceId = c.get("workspaceId") as string;
   const userId = c.get("userId") as string;
