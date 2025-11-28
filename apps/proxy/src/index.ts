@@ -3,7 +3,7 @@ import { workspace } from "@gitpad/db/schema/workspace";
 import { auth } from "@gitpad/auth";
 import "dotenv/config";
 import * as http from "http";
-import * as https from "https";
+import { WebSocket, WebSocketServer } from "ws";
 import httpProxy from "http-proxy";
 
 const PORT = parseInt(process.env.PORT || "3000");
@@ -39,7 +39,7 @@ function extractSubdomain(host: string): string {
   return "";
 }
 
-// Create HTTP server with proper WebSocket support
+// Create HTTP server
 const server = http.createServer(async (req: any, res: any) => {
   try {
     // Health check endpoint
@@ -54,10 +54,8 @@ const server = http.createServer(async (req: any, res: any) => {
     }
 
     // For ttyd's token endpoint, we just need to pass through
-    // ttyd uses /token to initiate WebSocket negotiation
     if (req.url === "/token" || req.url.startsWith("/token?")) {
       console.log(`Token request: ${req.url}`);
-      // Continue to proxy this below
     }
 
     // Parse request
@@ -76,8 +74,7 @@ const server = http.createServer(async (req: any, res: any) => {
     }
 
     console.log("SUBDOMAIN", subdomain);
-    console.log("HEADERS", req.headers);
-
+    
     // Validate session
     const userId = await validateSession(req.headers);
     console.log("VERIFIED SESSION", userId);
@@ -115,12 +112,12 @@ const server = http.createServer(async (req: any, res: any) => {
 
     console.log(`[${ws.id}] ${req.method} ${req.url}`);
 
-    // Create proxy server with WebSocket support
+    // Create proxy server for HTTP requests
     const proxy = httpProxy.createProxyServer({
       target: ws.backendUrl,
-      ws: true,
       changeOrigin: true,
-      secure: false, // Allow self-signed certificates
+      secure: false,
+      xfwd: true,
     });
 
     // Add auth and forwarding headers to proxied requests
@@ -151,6 +148,9 @@ const server = http.createServer(async (req: any, res: any) => {
   }
 });
 
+// Create WebSocket server for handling upgrades
+const wss = new WebSocketServer({ noServer: true });
+
 // Handle WebSocket upgrades
 server.on("upgrade", async (req: any, socket: any, head: any) => {
   try {
@@ -168,134 +168,92 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
 
     console.log(`[${subdomain}] WebSocket upgrade requested`);
 
-    // Validate session
     const userId = await validateSession(req.headers);
     if (!userId) {
       socket.destroy();
       return;
     }
 
-    // Lookup workspace
     const [ws] = await db
       .select()
       .from(workspace)
       .where(eq(workspace.subdomain, subdomain))
       .limit(1);
 
-    if (!ws) {
+    if (!ws || ws.userId !== userId || !ws.backendUrl) {
       socket.destroy();
       return;
     }
 
-    if (ws.userId !== userId) {
-      socket.destroy();
-      return;
-    }
+    console.log(`[${ws.id}] Upgrading client connection...`);
 
-    if (!ws.backendUrl) {
-      socket.destroy();
-      return;
-    }
+    // Handle the upgrade using ws library
+    wss.handleUpgrade(req, socket, head, (clientWs) => {
+      console.log(`[${ws.id}] Client connected, connecting to backend: ${ws.backendUrl}`);
+      
+      const backendUrl = new URL(ws.backendUrl!);
+      const targetOrigin = backendUrl.origin;
+      
+      // Determine protocol (ws or wss) based on backend URL
+      const protocol = backendUrl.protocol === "https:" ? "wss:" : "ws:";
+      const targetWsUrl = `${protocol}//${backendUrl.host}${req.url}`;
 
-    console.log(`[${ws.id}] WebSocket upgrade: ${req.url}`);
-    console.log(`[${ws.id}] Request headers:`, {
-      connection: req.headers.connection,
-      upgrade: req.headers.upgrade,
-      "sec-websocket-key": req.headers["sec-websocket-key"],
-      "sec-websocket-protocol": req.headers["sec-websocket-protocol"],
-      "sec-websocket-version": req.headers["sec-websocket-version"],
-    });
-
-    // Parse target URL
-    const targetUrl = new URL(ws.backendUrl!);
-    const isSecure = targetUrl.protocol === "https:";
-    const port = parseInt(targetUrl.port) || (isSecure ? 443 : 80);
-    const hostname = targetUrl.hostname;
-
-    console.log(`[${ws.id}] Connecting to backend: ${hostname}:${port} (secure: ${isSecure})`);
-
-    // Create backend request with upgrade headers
-    const backendReq = (isSecure ? https : http).request(
-      {
-        hostname,
-        port,
-        path: req.url,
-        method: "GET",
+      // Connect to backend WebSocket
+      const backendWs = new WebSocket(targetWsUrl, ["tty"], {
         headers: {
-          "Upgrade": "websocket",
-          "Connection": "Upgrade",
-          "Sec-WebSocket-Key": req.headers["sec-websocket-key"],
-          "Sec-WebSocket-Version": req.headers["sec-websocket-version"],
-          "Sec-WebSocket-Protocol": req.headers["sec-websocket-protocol"] || "",
           "X-Forwarded-For": req.socket.remoteAddress,
           "X-Forwarded-Proto": "https",
           "X-Forwarded-Host": host,
-          "Origin": targetUrl.origin, // Rewrite Origin just in case
+          "Origin": targetOrigin, // Rewrite Origin
+          "Cookie": req.headers.cookie, // Forward cookies if needed
         },
-      }
-    );
-
-    const handleUpgrade = (res: any, backendSocket: any) => {
-      console.log(`[${ws.id}] WebSocket upgrade successful! Protocol: ${res.headers["sec-websocket-protocol"]}`);
-      
-      // Send upgrade response to client
-      const responseHeaders = [
-        "HTTP/1.1 101 Switching Protocols",
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        `Sec-WebSocket-Accept: ${res.headers["sec-websocket-accept"]}`,
-        `Sec-WebSocket-Protocol: ${res.headers["sec-websocket-protocol"] || "tty"}`,
-        "\r\n"
-      ].join("\r\n");
-
-      socket.write(responseHeaders);
-
-      // Pipe data bidirectionally
-      socket.pipe(backendSocket);
-      backendSocket.pipe(socket);
-
-      backendSocket.on("close", () => {
-        console.log(`[${ws.id}] Backend closed`);
-        socket.end();
+        rejectUnauthorized: false // Allow self-signed if needed
       });
 
-      socket.on("close", () => {
-        console.log(`[${ws.id}] Client closed`);
-        backendSocket.end();
+      // Forward messages from client to backend
+      clientWs.on("message", (data) => {
+        if (backendWs.readyState === WebSocket.OPEN) {
+          backendWs.send(data);
+        }
       });
-    };
 
-    backendReq.on("upgrade", (res: any, backendSocket: any) => {
-      handleUpgrade(res, backendSocket);
+      // Forward messages from backend to client
+      backendWs.on("message", (data) => {
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(data);
+        }
+      });
+
+      // Handle errors and closure
+      const closeBoth = () => {
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
+        if (backendWs.readyState === WebSocket.OPEN) backendWs.close();
+      };
+
+      clientWs.on("close", () => {
+        console.log(`[${ws.id}] Client closed connection`);
+        closeBoth();
+      });
+
+      backendWs.on("close", () => {
+        console.log(`[${ws.id}] Backend closed connection`);
+        closeBoth();
+      });
+
+      clientWs.on("error", (e) => {
+        console.error(`[${ws.id}] Client WS error:`, e.message);
+        closeBoth();
+      });
+
+      backendWs.on("error", (e) => {
+        console.error(`[${ws.id}] Backend WS error:`, e.message);
+        closeBoth();
+      });
+
+      backendWs.on("open", () => {
+         console.log(`[${ws.id}] Backend connection established!`);
+      });
     });
-
-    backendReq.on("response", (res: any) => {
-      console.log(`[${ws.id}] Backend response status: ${res.statusCode}`);
-      
-      // Fallback: If we get 101 in response event instead of upgrade
-      if (res.statusCode === 101) {
-        console.log(`[${ws.id}] Handling 101 via response event. Headers:`, res.headers);
-        handleUpgrade(res, res.socket);
-        return;
-      }
-
-      // If not 101, it's likely an error
-      console.log(`[${ws.id}] Backend rejected upgrade. Headers:`, res.headers);
-      socket.write(`HTTP/1.1 ${res.statusCode} ${res.statusMessage}\r\n\r\n`);
-      socket.destroy();
-    });
-
-    backendReq.on("error", (error: any) => {
-      console.error(`[${ws.id}] Backend error:`, error.message);
-      socket.destroy();
-    });
-
-    socket.on("error", (error: any) => {
-      console.error(`[${ws.id}] Socket error:`, error.message);
-      backendReq.destroy();
-    });
-
-    backendReq.end(head);
   } catch (error) {
     console.error("WebSocket upgrade error:", error);
     socket.destroy();

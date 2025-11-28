@@ -15,12 +15,14 @@
     "@gitpad/db": "workspace:*",
     "dotenv": "catalog:",
     "hono": "catalog:",
-    "http-proxy": "^1.18.1"
+    "http-proxy": "^1.18.1",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
-    "typescript": "catalog:",
+    "@gitpad/config": "workspace:*",
     "@types/bun": "^1.2.6",
+    "@types/ws": "^8.18.1",
     "tsdown": "^0.16.5",
-    "@gitpad/config": "workspace:*"
+    "typescript": "catalog:"
   }
 }
