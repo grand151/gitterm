@@ -60,51 +60,51 @@ const server = http.createServer(async (req: any, res: any) => {
 
     // Parse request
     const host = req.headers.host;
-    if (!host) {
+  if (!host) {
       res.writeHead(400, { "Content-Type": "text/plain" });
       res.end("Missing Host header");
       return;
-    }
+  }
 
-    const subdomain = extractSubdomain(host);
-    if (!subdomain) {
+  const subdomain = extractSubdomain(host);
+  if (!subdomain) {
       res.writeHead(400, { "Content-Type": "text/plain" });
       res.end("Invalid subdomain");
       return;
-    }
+  }
 
     console.log("SUBDOMAIN", subdomain);
-    
-    // Validate session
+
+  // Validate session
     const userId = await validateSession(req.headers);
     console.log("VERIFIED SESSION", userId);
 
-    if (!userId) {
+  if (!userId) {
       res.writeHead(401, { "Content-Type": "text/plain" });
       res.end("Unauthorized");
       return;
-    }
+  }
 
-    // Lookup workspace
-    const [ws] = await db
-      .select()
-      .from(workspace)
-      .where(eq(workspace.subdomain, subdomain))
-      .limit(1);
+  // Lookup workspace
+  const [ws] = await db
+    .select()
+    .from(workspace)
+    .where(eq(workspace.subdomain, subdomain))
+    .limit(1);
 
-    if (!ws) {
+  if (!ws) {
       res.writeHead(404, { "Content-Type": "text/plain" });
       res.end("Workspace not found");
       return;
-    }
+  }
 
-    if (ws.userId !== userId) {
+  if (ws.userId !== userId) {
       res.writeHead(403, { "Content-Type": "text/plain" });
       res.end("Forbidden");
       return;
-    }
+  }
 
-    if (!ws.backendUrl) {
+  if (!ws.backendUrl) {
       res.writeHead(503, { "Content-Type": "text/plain" });
       res.end("Workspace backend not ready");
       return;
@@ -239,18 +239,16 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       });
 
       // Forward messages from client to backend
-      clientWs.on("message", (data) => {
-        // console.log(`[${ws.id}] Client -> Backend: ${data.toString().length} bytes`);
+      clientWs.on("message", (data, isBinary) => {
         if (backendWs.readyState === WebSocket.OPEN) {
-          backendWs.send(data);
+          backendWs.send(data, { binary: isBinary });
         }
       });
 
       // Forward messages from backend to client
-      backendWs.on("message", (data) => {
-        // console.log(`[${ws.id}] Backend -> Client: ${data.toString().length} bytes`);
+      backendWs.on("message", (data, isBinary) => {
         if (clientWs.readyState === WebSocket.OPEN) {
-          clientWs.send(data);
+          clientWs.send(data, { binary: isBinary });
         }
       });
 
@@ -292,13 +290,13 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
 
 // Start server
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🔄 Proxy server listening on http://0.0.0.0:${PORT}`);
-  console.log("Wildcard subdomains routed via Cloudflare DNS");
-});
+      console.log(`🔄 Proxy server listening on http://0.0.0.0:${PORT}`);
+      console.log("Wildcard subdomains routed via Cloudflare DNS");
+    });
 
-process.on("SIGTERM", () => {
-  console.log("SIGTERM received, shutting down gracefully");
+    process.on("SIGTERM", () => {
+      console.log("SIGTERM received, shutting down gracefully");
   server.close(() => {
-    process.exit(0);
-  });
-});
+        process.exit(0);
+      });
+    });
