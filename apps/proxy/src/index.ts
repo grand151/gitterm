@@ -197,6 +197,13 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
     }
 
     console.log(`[${ws.id}] WebSocket upgrade: ${req.url}`);
+    console.log(`[${ws.id}] Request headers:`, {
+      connection: req.headers.connection,
+      upgrade: req.headers.upgrade,
+      "sec-websocket-key": req.headers["sec-websocket-key"],
+      "sec-websocket-protocol": req.headers["sec-websocket-protocol"],
+      "sec-websocket-version": req.headers["sec-websocket-version"],
+    });
 
     // Create proxy for WebSocket
     const proxy = httpProxy.createProxyServer({
@@ -211,31 +218,43 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       proxyReq.setHeader("X-Forwarded-For", req.socket.remoteAddress);
       proxyReq.setHeader("X-Forwarded-Proto", "https");
       proxyReq.setHeader("X-Forwarded-Host", host);
+      console.log(`[${ws.id}] WebSocket proxyReq sent`);
+    });
+
+    // Handle upgrade response from backend
+    proxy.on("proxyRes", (proxyRes: any) => {
+      console.log(`[${ws.id}] WebSocket proxyRes status: ${proxyRes.statusCode}`);
+      console.log(`[${ws.id}] Response headers:`, {
+        "sec-websocket-accept": proxyRes.headers["sec-websocket-accept"],
+        "sec-websocket-protocol": proxyRes.headers["sec-websocket-protocol"],
+        upgrade: proxyRes.headers.upgrade,
+        connection: proxyRes.headers.connection,
+      });
     });
 
     // Handle errors from proxy
     proxy.on("error", (error: any) => {
       console.error(`[${ws.id}] WebSocket proxy error:`, error);
-      socket.destroy();
+      if (!socket.destroyed) {
+        socket.destroy();
+      }
     });
 
     // Handle socket errors
     socket.on("error", (error: any) => {
-      console.error(`[${ws.id}] Socket error:`, error);
+      console.error(`[${ws.id}] Socket error:`, error.message);
     });
 
-    // Keep connection alive with pings
-    const keepAliveInterval = setInterval(() => {
-      if (socket.writable) {
-        socket.ping();
-      }
-    }, 30000);
+    // Handle backend socket errors
+    proxy.on("proxyReqWs", () => {
+      console.log(`[${ws.id}] WebSocket proxy established`);
+    });
 
     socket.on("close", () => {
-      clearInterval(keepAliveInterval);
       console.log(`[${ws.id}] WebSocket closed`);
     });
 
+    console.log(`[${ws.id}] Starting WebSocket proxy to ${ws.backendUrl}`);
     // Forward WebSocket upgrade
     proxy.ws(req, socket, head);
   } catch (error) {
