@@ -211,30 +211,19 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       ws: true,
       changeOrigin: true,
       secure: false,
+      followRedirects: true,
     });
 
-    // Add forwarding headers
-    proxy.on("proxyReq", (proxyReq: any) => {
-      proxyReq.setHeader("X-Forwarded-For", req.socket.remoteAddress);
-      proxyReq.setHeader("X-Forwarded-Proto", "https");
-      proxyReq.setHeader("X-Forwarded-Host", host);
-      console.log(`[${ws.id}] WebSocket proxyReq sent`);
-    });
-
-    // Handle upgrade response from backend
-    proxy.on("proxyRes", (proxyRes: any) => {
-      console.log(`[${ws.id}] WebSocket proxyRes status: ${proxyRes.statusCode}`);
-      console.log(`[${ws.id}] Response headers:`, {
-        "sec-websocket-accept": proxyRes.headers["sec-websocket-accept"],
-        "sec-websocket-protocol": proxyRes.headers["sec-websocket-protocol"],
-        upgrade: proxyRes.headers.upgrade,
-        connection: proxyRes.headers.connection,
-      });
-    });
+    // Prepare headers for backend
+    const proxyHeaders = {
+      "X-Forwarded-For": req.socket.remoteAddress,
+      "X-Forwarded-Proto": "https",
+      "X-Forwarded-Host": host,
+    };
 
     // Handle errors from proxy
     proxy.on("error", (error: any) => {
-      console.error(`[${ws.id}] WebSocket proxy error:`, error);
+      console.error(`[${ws.id}] WebSocket proxy error:`, error.message);
       if (!socket.destroyed) {
         socket.destroy();
       }
@@ -245,18 +234,15 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       console.error(`[${ws.id}] Socket error:`, error.message);
     });
 
-    // Handle backend socket errors
-    proxy.on("proxyReqWs", () => {
-      console.log(`[${ws.id}] WebSocket proxy established`);
-    });
-
     socket.on("close", () => {
       console.log(`[${ws.id}] WebSocket closed`);
     });
 
     console.log(`[${ws.id}] Starting WebSocket proxy to ${ws.backendUrl}`);
-    // Forward WebSocket upgrade
-    proxy.ws(req, socket, head);
+    console.log(`[${ws.id}] Forwarding headers:`, proxyHeaders);
+    
+    // Forward WebSocket upgrade with headers
+    proxy.ws(req, socket, head, { headers: proxyHeaders });
   } catch (error) {
     console.error("WebSocket upgrade error:", error);
     socket.destroy();
