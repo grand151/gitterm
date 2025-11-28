@@ -149,7 +149,16 @@ const server = http.createServer(async (req: any, res: any) => {
 });
 
 // Create WebSocket server for handling upgrades
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ 
+  noServer: true,
+  // Explicitly handle and accept the 'tty' protocol
+  handleProtocols: (protocols) => {
+    if (protocols.has("tty")) {
+      return "tty";
+    }
+    return false;
+  }
+});
 
 // Handle WebSocket upgrades
 server.on("upgrade", async (req: any, socket: any, head: any) => {
@@ -212,6 +221,7 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
 
       // Forward messages from client to backend
       clientWs.on("message", (data) => {
+        // console.log(`[${ws.id}] Client -> Backend: ${data.toString().length} bytes`);
         if (backendWs.readyState === WebSocket.OPEN) {
           backendWs.send(data);
         }
@@ -219,6 +229,7 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
 
       // Forward messages from backend to client
       backendWs.on("message", (data) => {
+        // console.log(`[${ws.id}] Backend -> Client: ${data.toString().length} bytes`);
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(data);
         }
