@@ -3,6 +3,7 @@ import { workspace } from "@gitpad/db/schema/workspace";
 import { auth } from "@gitpad/auth";
 import "dotenv/config";
 import * as http from "http";
+import * as https from "https";
 import httpProxy from "http-proxy";
 
 const PORT = parseInt(process.env.PORT || "3000");
@@ -205,44 +206,76 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       "sec-websocket-version": req.headers["sec-websocket-version"],
     });
 
-    // Create proxy for WebSocket
-    const proxy = httpProxy.createProxyServer({
-      target: ws.backendUrl,
-      ws: true,
-      changeOrigin: true,
-      secure: false,
-      followRedirects: true,
-    });
+    // Parse target URL
+    const targetUrl = new URL(ws.backendUrl);
+    const isSecure = targetUrl.protocol === "https:";
+    const port = parseInt(targetUrl.port) || (isSecure ? 443 : 80);
+    const hostname = targetUrl.hostname;
 
-    // Prepare headers for backend
-    const proxyHeaders = {
-      "X-Forwarded-For": req.socket.remoteAddress,
-      "X-Forwarded-Proto": "https",
-      "X-Forwarded-Host": host,
-    };
+    console.log(`[${ws.id}] Connecting to backend: ${hostname}:${port} (secure: ${isSecure})`);
 
-    // Handle errors from proxy
-    proxy.on("error", (error: any) => {
-      console.error(`[${ws.id}] WebSocket proxy error:`, error.message);
-      if (!socket.destroyed) {
-        socket.destroy();
+    // Create backend request with upgrade headers
+    const backendReq = (isSecure ? https : http).request(
+      {
+        hostname,
+        port,
+        path: req.url,
+        method: "GET",
+        headers: {
+          "Upgrade": "websocket",
+          "Connection": "Upgrade",
+          "Sec-WebSocket-Key": req.headers["sec-websocket-key"],
+          "Sec-WebSocket-Version": req.headers["sec-websocket-version"],
+          "Sec-WebSocket-Protocol": req.headers["sec-websocket-protocol"] || "",
+          "X-Forwarded-For": req.socket.remoteAddress,
+          "X-Forwarded-Proto": "https",
+          "X-Forwarded-Host": host,
+        },
+      },
+      (res: any) => {
+        console.log(`[${ws.id}] Backend response status: ${res.statusCode}`);
       }
+    );
+
+    backendReq.on("upgrade", (res: any, backendSocket: any) => {
+      console.log(`[${ws.id}] WebSocket upgrade successful!`);
+      
+      // Send upgrade response to client
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Connection: Upgrade\r\n" +
+        `Sec-WebSocket-Accept: ${res.headers["sec-websocket-accept"]}\r\n` +
+        `Sec-WebSocket-Protocol: ${res.headers["sec-websocket-protocol"] || ""}\r\n` +
+        "\r\n"
+      );
+
+      // Pipe data bidirectionally
+      socket.pipe(backendSocket);
+      backendSocket.pipe(socket);
+
+      backendSocket.on("close", () => {
+        console.log(`[${ws.id}] Backend closed`);
+        socket.end();
+      });
+
+      socket.on("close", () => {
+        console.log(`[${ws.id}] Client closed`);
+        backendSocket.end();
+      });
     });
 
-    // Handle socket errors
+    backendReq.on("error", (error: any) => {
+      console.error(`[${ws.id}] Backend error:`, error.message);
+      socket.destroy();
+    });
+
     socket.on("error", (error: any) => {
       console.error(`[${ws.id}] Socket error:`, error.message);
+      backendReq.destroy();
     });
 
-    socket.on("close", () => {
-      console.log(`[${ws.id}] WebSocket closed`);
-    });
-
-    console.log(`[${ws.id}] Starting WebSocket proxy to ${ws.backendUrl}`);
-    console.log(`[${ws.id}] Forwarding headers:`, proxyHeaders);
-    
-    // Forward WebSocket upgrade with headers
-    proxy.ws(req, socket, head, { headers: proxyHeaders });
+    backendReq.end(head);
   } catch (error) {
     console.error("WebSocket upgrade error:", error);
     socket.destroy();
