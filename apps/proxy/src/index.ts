@@ -19,7 +19,6 @@ async function validateSession(headers: any): Promise<string | null> {
     console.error("Session validation error:", error);
     return null;
   }
-  
 }
 
 // Helper to extract subdomain from host
@@ -53,58 +52,53 @@ const server = http.createServer(async (req: any, res: any) => {
       return;
     }
 
-    // For ttyd's token endpoint, we just need to pass through
-    if (req.url === "/token" || req.url.startsWith("/token?")) {
-      console.log(`Token request: ${req.url}`);
-    }
-
     // Parse request
     const host = req.headers.host;
-  if (!host) {
+    if (!host) {
       res.writeHead(400, { "Content-Type": "text/plain" });
       res.end("Missing Host header");
       return;
-  }
+    }
 
-  const subdomain = extractSubdomain(host);
-  if (!subdomain) {
+    const subdomain = extractSubdomain(host);
+    if (!subdomain) {
       res.writeHead(400, { "Content-Type": "text/plain" });
       res.end("Invalid subdomain");
       return;
-  }
+    }
 
     console.log("SUBDOMAIN", subdomain);
 
-  // Validate session
+    // Validate session
     const userId = await validateSession(req.headers);
     console.log("VERIFIED SESSION", userId);
 
-  if (!userId) {
+    if (!userId) {
       res.writeHead(401, { "Content-Type": "text/plain" });
       res.end("Unauthorized");
       return;
-  }
+    }
 
-  // Lookup workspace
-  const [ws] = await db
-    .select()
-    .from(workspace)
-    .where(eq(workspace.subdomain, subdomain))
-    .limit(1);
+    // Lookup workspace
+    const [ws] = await db
+      .select()
+      .from(workspace)
+      .where(eq(workspace.subdomain, subdomain))
+      .limit(1);
 
-  if (!ws) {
+    if (!ws) {
       res.writeHead(404, { "Content-Type": "text/plain" });
       res.end("Workspace not found");
       return;
-  }
+    }
 
-  if (ws.userId !== userId) {
+    if (ws.userId !== userId) {
       res.writeHead(403, { "Content-Type": "text/plain" });
       res.end("Forbidden");
       return;
-  }
+    }
 
-  if (!ws.backendUrl) {
+    if (!ws.backendUrl) {
       res.writeHead(503, { "Content-Type": "text/plain" });
       res.end("Workspace backend not ready");
       return;
@@ -118,6 +112,7 @@ const server = http.createServer(async (req: any, res: any) => {
       changeOrigin: true,
       secure: false,
       xfwd: true,
+      ws: false, // Don't proxy WebSocket through http-proxy
     });
 
     // Add auth and forwarding headers to proxied requests
@@ -153,7 +148,6 @@ const wss = new WebSocketServer({
   noServer: true,
   perMessageDeflate: {
     zlibDeflateOptions: {
-      // See zlib defaults.
       chunkSize: 1024,
       memLevel: 7,
       level: 3
@@ -161,16 +155,13 @@ const wss = new WebSocketServer({
     zlibInflateOptions: {
       chunkSize: 10 * 1024
     },
-    // Other options settable:
-    clientNoContextTakeover: true, // Defaults to negotiated value.
-    serverNoContextTakeover: true, // Defaults to negotiated value.
-    serverMaxWindowBits: 1024, // Defaults to negotiated value.
-    // Below options specified as default values.
-    concurrencyLimit: 10, // Limits zlib concurrency for perf.
-    threshold: 1024 // Size (in bytes) below which messages
-    // should not be compressed if context takeover is disabled.
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true,
+    serverMaxWindowBits: 10, // Fixed: was 1024, should be 10-15
+    concurrencyLimit: 10,
+    threshold: 1024
   },
-  // Explicitly handle and accept the 'tty' protocol
+  // Handle the 'tty' protocol that ttyd uses
   handleProtocols: (protocols) => {
     if (protocols.has("tty")) {
       return "tty";
@@ -184,20 +175,23 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
   try {
     const host = req.headers.host;
     if (!host) {
+      console.error("No host header in upgrade request");
       socket.destroy();
       return;
     }
 
     const subdomain = extractSubdomain(host);
     if (!subdomain) {
+      console.error("Invalid subdomain in upgrade request");
       socket.destroy();
       return;
     }
 
-    console.log(`[${subdomain}] WebSocket upgrade requested`);
+    console.log(`[${subdomain}] WebSocket upgrade requested for ${req.url}`);
 
     const userId = await validateSession(req.headers);
     if (!userId) {
+      console.error(`[${subdomain}] Unauthorized upgrade attempt`);
       socket.destroy();
       return;
     }
@@ -209,6 +203,7 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       .limit(1);
 
     if (!ws || ws.userId !== userId || !ws.backendUrl) {
+      console.error(`[${subdomain}] Invalid workspace or no backend URL`);
       socket.destroy();
       return;
     }
@@ -220,28 +215,64 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       console.log(`[${ws.id}] Client connected, connecting to backend: ${ws.backendUrl}`);
       
       const backendUrl = new URL(ws.backendUrl!);
-      const targetOrigin = backendUrl.origin;
       
       // Determine protocol (ws or wss) based on backend URL
       const protocol = backendUrl.protocol === "https:" ? "wss:" : "ws:";
       const targetWsUrl = `${protocol}//${backendUrl.host}${req.url}`;
+      
+      console.log(`[${ws.id}] Connecting to: ${targetWsUrl}`);
 
-      // Connect to backend WebSocket
+      // Buffer for messages received before backend connects
+      const messageBuffer: Array<{ data: any; isBinary: boolean }> = [];
+      let backendConnected = false;
+
+      // Connect to backend WebSocket with proper headers
       const backendWs = new WebSocket(targetWsUrl, ["tty"], {
         headers: {
+          "Host": backendUrl.host,
           "X-Forwarded-For": req.socket.remoteAddress,
           "X-Forwarded-Proto": "https",
           "X-Forwarded-Host": host,
-          "Origin": targetOrigin, // Rewrite Origin
-          "Cookie": req.headers.cookie, // Forward cookies if needed
+          "User-Agent": req.headers["user-agent"] || "GitPad-Proxy/1.0",
+          // Forward auth cookies if present
+          ...(req.headers.cookie ? { "Cookie": req.headers.cookie } : {}),
         },
-        rejectUnauthorized: false // Allow self-signed if needed
+        rejectUnauthorized: false, // Allow self-signed certs in dev
+        perMessageDeflate: true,
+      });
+
+      // Set up ping/pong for keepalive
+      let pingInterval: NodeJS.Timeout;
+      
+      backendWs.on("open", () => {
+        console.log(`[${ws.id}] Backend connection established!`);
+        backendConnected = true;
+        
+        // Send any buffered messages
+        if (messageBuffer.length > 0) {
+          console.log(`[${ws.id}] Sending ${messageBuffer.length} buffered messages`);
+          messageBuffer.forEach(({ data, isBinary }) => {
+            backendWs.send(data, { binary: isBinary });
+          });
+          messageBuffer.length = 0;
+        }
+
+        // Start keepalive ping
+        pingInterval = setInterval(() => {
+          if (backendWs.readyState === WebSocket.OPEN) {
+            backendWs.ping();
+          }
+        }, 30000); // Ping every 30 seconds
       });
 
       // Forward messages from client to backend
       clientWs.on("message", (data, isBinary) => {
-        if (backendWs.readyState === WebSocket.OPEN) {
+        if (backendConnected && backendWs.readyState === WebSocket.OPEN) {
           backendWs.send(data, { binary: isBinary });
+        } else if (!backendConnected) {
+          // Buffer messages until backend connects
+          messageBuffer.push({ data, isBinary });
+          console.log(`[${ws.id}] Buffered message (${messageBuffer.length} total)`);
         }
       });
 
@@ -252,19 +283,35 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
         }
       });
 
+      // Handle pong responses
+      backendWs.on("pong", () => {
+        // Backend is alive
+      });
+
       // Handle errors and closure
       const closeBoth = () => {
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
-        if (backendWs.readyState === WebSocket.OPEN) backendWs.close();
+        if (pingInterval) {
+          clearInterval(pingInterval);
+        }
+        
+        if (clientWs.readyState === WebSocket.OPEN || 
+            clientWs.readyState === WebSocket.CONNECTING) {
+          clientWs.close();
+        }
+        
+        if (backendWs.readyState === WebSocket.OPEN || 
+            backendWs.readyState === WebSocket.CONNECTING) {
+          backendWs.close();
+        }
       };
 
-      clientWs.on("close", () => {
-        console.log(`[${ws.id}] Client closed connection`);
+      clientWs.on("close", (code, reason) => {
+        console.log(`[${ws.id}] Client closed connection: ${code} ${reason}`);
         closeBoth();
       });
 
-      backendWs.on("close", () => {
-        console.log(`[${ws.id}] Backend closed connection`);
+      backendWs.on("close", (code, reason) => {
+        console.log(`[${ws.id}] Backend closed connection: ${code} ${reason}`);
         closeBoth();
       });
 
@@ -278,8 +325,11 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
         closeBoth();
       });
 
-      backendWs.on("open", () => {
-         console.log(`[${ws.id}] Backend connection established!`);
+      // Handle client ping (respond with pong)
+      clientWs.on("ping", () => {
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.pong();
+        }
       });
     });
   } catch (error) {
@@ -290,13 +340,13 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
 
 // Start server
 server.listen(PORT, "0.0.0.0", () => {
-      console.log(`🔄 Proxy server listening on http://0.0.0.0:${PORT}`);
-      console.log("Wildcard subdomains routed via Cloudflare DNS");
-    });
+  console.log(`🔄 Proxy server listening on http://0.0.0.0:${PORT}`);
+  console.log("Wildcard subdomains routed via Cloudflare DNS");
+});
 
-    process.on("SIGTERM", () => {
-      console.log("SIGTERM received, shutting down gracefully");
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received, shutting down gracefully");
   server.close(() => {
-        process.exit(0);
-      });
-    });
+    process.exit(0);
+  });
+});
