@@ -18,6 +18,7 @@ async function validateSession(headers: any): Promise<string | null> {
     console.error("Session validation error:", error);
     return null;
   }
+  
 }
 
 // Helper to extract subdomain from host

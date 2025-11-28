@@ -24,7 +24,6 @@ app.use(
 				`http://${BASE_DOMAIN}`,
 			];
 			
-			// Also allow localhost for development
 			if (origin.includes("localhost")) return origin;
 			
 			return allowedOrigins.includes(origin) ? origin : null;
