@@ -52,6 +52,13 @@ const server = http.createServer(async (req: any, res: any) => {
       return;
     }
 
+    // For ttyd's token endpoint, we just need to pass through
+    // ttyd uses /token to initiate WebSocket negotiation
+    if (req.url === "/token" || req.url.startsWith("/token?")) {
+      console.log(`Token request: ${req.url}`);
+      // Continue to proxy this below
+    }
+
     // Parse request
     const host = req.headers.host;
     if (!host) {
