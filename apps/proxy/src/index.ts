@@ -115,9 +115,12 @@ const server = http.createServer(async (req: any, res: any) => {
       secure: false, // Allow self-signed certificates
     });
 
-    // Add auth header to proxied requests
+    // Add auth and forwarding headers to proxied requests
     proxy.on("proxyReq", (proxyReq: any) => {
       proxyReq.setHeader("X-Auth-User", userId);
+      proxyReq.setHeader("X-Forwarded-For", req.socket.remoteAddress);
+      proxyReq.setHeader("X-Forwarded-Proto", "https");
+      proxyReq.setHeader("X-Forwarded-Host", host);
     });
 
     // Handle proxy errors
@@ -196,9 +199,13 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       secure: false,
     });
 
-    // Add auth header
+    // Add auth and forwarding headers
     proxy.on("proxyReq", (proxyReq: any) => {
       proxyReq.setHeader("X-Auth-User", userId);
+      proxyReq.setHeader("X-Forwarded-For", req.socket.remoteAddress);
+      proxyReq.setHeader("X-Forwarded-Proto", "https");
+      proxyReq.setHeader("X-Forwarded-Host", host);
+      console.log(`[${ws.id}] WebSocket proxyReq headers set`);
     });
 
     // Handle errors
@@ -207,7 +214,12 @@ server.on("upgrade", async (req: any, socket: any, head: any) => {
       socket.destroy();
     });
 
+    proxy.on("proxyRes", () => {
+      console.log(`[${ws.id}] WebSocket proxyRes received`);
+    });
+
     // Forward WebSocket upgrade
+    console.log(`[${ws.id}] Starting WebSocket proxy...`);
     proxy.ws(req, socket, head);
   } catch (error) {
     console.error("WebSocket upgrade error:", error);
