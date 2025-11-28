@@ -86,9 +86,12 @@ app.use("*", async (c: Context, next: any) => {
     return c.text("Invalid subdomain", 400);
   }
 
+  console.log("SUBDOMAIN", subdomain);
+  console.log("HEADERS", c.req.raw.headers);
   // Validate session
   const userId = await validateSession(c.req.raw.headers);
 
+  console.log("VERFIED SESSION", userId);
   if (!userId) {
     return c.text("Unauthorized", 401);
   }

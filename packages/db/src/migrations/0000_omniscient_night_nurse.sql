@@ -98,9 +98,14 @@ CREATE TABLE "workspace" (
 	"image_id" uuid NOT NULL,
 	"cloud_provider_id" uuid NOT NULL,
 	"region" text NOT NULL,
+	"repository_url" text,
+	"domain" text,
+	"subdomain" text,
+	"backend_url" text,
 	"status" "workspace_status" NOT NULL,
 	"start_at" timestamp NOT NULL,
-	"end_at" timestamp
+	"end_at" timestamp,
+	CONSTRAINT "workspace_subdomain_unique" UNIQUE("subdomain")
 );
 --> statement-breakpoint
 CREATE TABLE "workspace_environment_variables" (
