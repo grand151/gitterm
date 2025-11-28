@@ -12,6 +12,15 @@ const app = new Hono();
 // Middleware: logger
 app.use(logger());
 
+// Health check endpoint
+app.get("/health", (c) => {
+  return c.json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    service: "proxy"
+  });
+});
+
 // Helper to validate session from request headers
 async function validateSession(headers: any): Promise<string | null> {
   try {

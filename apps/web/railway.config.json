@@ -14,8 +14,8 @@
       },
     "deploy": {
       "startCommand": "cd apps/web && bun run dist/index.mjs",
-      "healthcheckPath": "/",
+      "healthcheckPath": "/api/health",
       "healthcheckTimeout": 100,
       "restartPolicyType": "never"
-      }
+    }
   }
