@@ -132,39 +132,124 @@ app.use("*", async (c: Context, next: any) => {
 app.all("*", async (c: Context) => {
   const backendUrl = c.get("backendUrl") as string;
   const workspaceId = c.get("workspaceId") as string;
+  const subdomain = c.get("subdomain") as string;
   const path = c.req.path;
   const query = c.req.url.split("?")[1] ?? "";
 
   try {
-    const targetUrl = `${backendUrl}${path}${query ? "?" + query : ""}`;
-    console.log(`[${workspaceId}] ${c.req.method} ${targetUrl}`);
+    // Test different URL combinations
+    const urlVariations = [
+      {
+        name: "original",
+        url: `${backendUrl}${path}${query ? "?" + query : ""}`,
+      },
+      {
+        name: "https-converted",
+        url: `${backendUrl.replace(/^http:\/\//, "https://")}${path}${query ? "?" + query : ""}`,
+      },
+      {
+        name: "http-forced",
+        url: `${backendUrl.replace(/^https:\/\//, "http://")}${path}${query ? "?" + query : ""}`,
+      },
+      {
+        name: "root-path",
+        url: `${backendUrl}/`,
+      },
+      {
+        name: "root-https",
+        url: `${backendUrl.replace(/^http:\/\//, "https://")}/`,
+      },
+      {
+        name: "root-with-port",
+        url: `${backendUrl.replace(/:\d+$/, "")}:7681/`,
+      },
+      {
+        name: "root-https-with-port",
+        url: `${backendUrl.replace(/^http:\/\//, "https://").replace(/:\d+$/, "")}:7681/`,
+      },
+      {
+        name: "ipv6-localhost",
+        url: `http://[::1]:7681/`,
+      },
+      {
+        name: "ipv6-https-localhost",
+        url: `https://[::1]:7681/`,
+      },
+      {
+        name: "ipv6-internal",
+        url: `http://[${subdomain}.railway.internal]:7681/`,
+      },
+      {
+        name: "ipv6-https-internal",
+        url: `https://[${subdomain}.railway.internal]:7681/`,
+      },
+      {
+        name: "ipv6-service-id",
+        url: `http://[${workspaceId}.railway.internal]:7681/`,
+      },
+      {
+        name: "ipv6-https-service-id",
+        url: `https://[${workspaceId}.railway.internal]:7681/`,
+      },
+    ];
 
-    // Get request body if applicable
-    let body: any;
-    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
-      body = c.req.raw.body;
+    let lastError: any = null;
+
+    console.log(`[${workspaceId}] Testing URL variations for: ${c.req.method} ${path}`);
+    console.log(`[${workspaceId}] Backend URL: ${backendUrl}`);
+    console.log(`[${workspaceId}] Available variations:`, urlVariations.map(v => v.name).join(", "));
+
+    // Try each URL variation
+    for (const variation of urlVariations) {
+      try {
+        console.log(`[${workspaceId}] [ATTEMPT] ${variation.name}: ${variation.url}`);
+        
+        let body: any;
+        if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+          body = c.req.raw.body;
+        }
+
+        const response = await fetch(variation.url, {
+          method: c.req.method,
+          headers: c.req.raw.headers as any,
+          body,
+          signal: AbortSignal.timeout(5000),
+        });
+
+        console.log(`[${workspaceId}] [SUCCESS] ${variation.name}: ${response.status}`);
+
+        // Add response header to identify proxied request
+        const headers = new Headers(response.headers);
+        headers.set("X-Proxied-For", workspaceId);
+        headers.set("X-Proxy-Variation", variation.name);
+
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      } catch (error: any) {
+        console.log(`[${workspaceId}] [FAILED] ${variation.name}: ${error.message}`);
+        lastError = error;
+        continue;
+      }
     }
 
-
-
-    // Forward request
-    const response = await fetch(targetUrl, {
-      method: c.req.method,
-      headers: c.req.raw.headers as any,
-      body,
+    // If all variations failed, log and return error
+    console.error(`[${workspaceId}] All URL variations failed`);
+    console.error(`[${workspaceId}] Final error:`, {
+      message: lastError?.message,
+      code: lastError?.code,
+      errno: lastError?.errno,
     });
-
-    // Add response header to identify proxied request
-    const headers = new Headers(response.headers);
-    headers.set("X-Proxied-For", workspaceId);
-
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
+    console.error(`[${workspaceId}] Tested variations:`);
+    urlVariations.forEach(v => {
+      console.error(`  - ${v.name}: ${v.url}`);
     });
+    
+    return c.text(`Bad Gateway - All connection attempts failed. Last error: ${lastError?.message || "Unknown"}`, 502);
   } catch (error) {
-    console.error(`[${workspaceId}] Proxy error:`, error);
+    console.error(`[${workspaceId}] Proxy handler error:`, error);
     return c.text("Bad Gateway", 502);
   }
 });
