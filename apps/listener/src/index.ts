@@ -14,7 +14,21 @@ console.log("CORS_ORIGIN", process.env.CORS_ORIGIN);
 
 app.use("/*", cors({
     // origin: process.env.CORS_ORIGIN ?? "*",
-	origin: ["https://gitterm.dev", "http://localhost:3001"],
+    origin: (origin) => {
+        if (!origin) return null;
+        const BASE_DOMAIN = process.env.BASE_DOMAIN || "gitterm.dev";
+        
+        // Allow main web app domain
+        const allowedOrigins = [
+            `https://${BASE_DOMAIN}`,
+            `http://${BASE_DOMAIN}`,
+        ];
+        
+        // Allow localhost for development
+        if (origin.includes("localhost")) return origin;
+        
+        return allowedOrigins.includes(origin) ? origin : null;
+    },
 	allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 	allowHeaders: ["Content-Type", "Authorization", "Cookie"],
 	credentials: true,
