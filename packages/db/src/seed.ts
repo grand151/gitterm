@@ -1,5 +1,5 @@
 import { db } from ".";
-import { agentType, cloudProvider, image, type NewAgentType, type NewCloudProvider } from "./schema/cloud";
+import { agentType, cloudProvider, image, region, type NewAgentType, type NewCloudProvider } from "./schema/cloud";
 
 
 const newCloudProviders: NewCloudProvider[] = [
@@ -23,9 +23,32 @@ const newAgentTypes: NewAgentType[] = [
     },
 ]
 
+const railwayRegions = [
+    {
+        name: "US West Metal",
+        location: "California, USA",
+        externalRegionIdentifier: "us-west2",
+    },
+    {
+        name: "US East Metal",
+        location: "Virginia, USA",
+        externalRegionIdentifier: "us-east4-eqdc4a",
+    },    
+    {
+        name: "EU West Metal",
+        location: "Amsterdam, Netherlands",
+        externalRegionIdentifier: "europe-west4-drams3a",
+    },    
+    {
+        name: "Southeast Asia Metal",
+        location: "Singapore",
+        externalRegionIdentifier: "asia-southeast1-eqsg3a",
+    },
+]
+
 async function seedDB() {
 
-    await db.insert(cloudProvider).values(newCloudProviders).returning();
+    const cloudProviders = await db.insert(cloudProvider).values(newCloudProviders).returning();
 
     const agents = await db.insert(agentType).values(newAgentTypes).returning();
 
@@ -36,7 +59,14 @@ async function seedDB() {
             agentTypeId: agents[0]?.id ?? "",
         }
     ])
-
+    await db.insert(region).values(
+        railwayRegions.map((region) => ({
+            name: region.name,
+            location: region.location,
+            externalRegionIdentifier: region.externalRegionIdentifier,
+            cloudProviderId: cloudProviders[0]?.id ?? "",
+        })),
+    )
 }
 
 seedDB().then(() => {

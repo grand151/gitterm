@@ -1,7 +1,10 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, uuid, pgEnum } from "drizzle-orm/pg-core";
 import { user } from "./auth";
-import { agentType, image } from "./cloud";
-import { cloudProvider, workspaceStatusEnum } from "./cloud";
+import { agentType, cloudProvider, image, region } from "./cloud";
+import { relations } from "drizzle-orm";
+
+export const instanceStatusEnum = pgEnum('instance_status', ['pending', 'running', 'stopped', 'terminated'] as const);
+export const workspaceStatusEnum = pgEnum('workspace_status', ['pending', 'running', 'stopped', 'terminated'] as const);
 
 export const workspace = pgTable("workspace", {
 	id: uuid("id").primaryKey().defaultRandom(),
@@ -9,13 +12,14 @@ export const workspace = pgTable("workspace", {
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
 	imageId: uuid("image_id").notNull().references(() => image.id, { onDelete: "cascade" }),
 	cloudProviderId: uuid("cloud_provider_id").notNull().references(() => cloudProvider.id, { onDelete: "cascade" }),
-	region: text("region").notNull(),
+	regionId: uuid("region_id").notNull().references(() => region.id, { onDelete: "cascade" }),
     repositoryUrl: text("repository_url"),
-    domain: text("domain"), // Full domain: ws-123.gitterm.dev
+    domain: text("domain").notNull(), // Full domain: ws-123.gitterm.dev
     subdomain: text("subdomain").unique(), // ws-123
     backendUrl: text("backend_url"), // Internal URL
     status: workspaceStatusEnum("status").notNull(),
 	startAt: timestamp("start_at").notNull(),
+	updatedAt: timestamp("updated_at").notNull(),
 	endAt: timestamp("end_at"),
 });
 
@@ -36,6 +40,13 @@ export const workspaceEnvironmentVariables = pgTable("workspace_environment_vari
 	createdAt: timestamp("created_at").notNull().defaultNow(),
 	updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+export const workspaceRelations = relations(workspace, ({ one }) => ({
+	region: one(region, {
+		fields: [workspace.regionId],
+		references: [region.id],
+	}),
+}));
 
 export type NewWorkspace = typeof workspace.$inferInsert;
 export type Workspace = typeof workspace.$inferSelect;

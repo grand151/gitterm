@@ -6,7 +6,11 @@ dotenv.config({
 
 import { drizzle } from "drizzle-orm/node-postgres";
 
-export const db = drizzle(process.env.DATABASE_URL || "");
+import * as authSchema from "./schema/auth";
+import * as cloudSchema from "./schema/cloud";
+import * as workspaceSchema from "./schema/workspace";
+
+export const db = drizzle(process.env.DATABASE_URL || "", { schema: { ...authSchema, ...cloudSchema, ...workspaceSchema } } );
 
 export {
 	eq,
