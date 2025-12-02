@@ -1,6 +1,8 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
-import { railwayRouter } from "./railway";
+import { railwayRouter } from "./railway/railway";
+import { railwayWebhookRouter } from "./railway/webhook";
 import { workspaceRouter } from "./workspace";
+import { workspaceEventsRouter } from "./workspace/events";
 
 export const appRouter = router({
 	healthCheck: publicProcedure.query(() => {
@@ -16,3 +18,9 @@ export const appRouter = router({
 	workspace: workspaceRouter,
 });
 export type AppRouter = typeof appRouter;
+
+export const listenerRouter = router({
+	railway: railwayWebhookRouter,
+	workspace: workspaceEventsRouter,
+});
+export type ListenerRouter = typeof listenerRouter;

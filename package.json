@@ -1,5 +1,5 @@
 {
-  "name": "gitpad",
+  "name": "gitterm",
   "private": true,
   "type": "module",
   "workspaces": {
@@ -25,6 +25,7 @@
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F server dev",
     "dev:proxy": "turbo -F proxy dev:ngrok",
+    "dev:listener": "turbo -F listener dev",
     "db:push": "turbo -F @gitpad/db db:push",
     "db:studio": "turbo -F @gitpad/db db:studio",
     "db:generate": "turbo -F @gitpad/db db:generate",

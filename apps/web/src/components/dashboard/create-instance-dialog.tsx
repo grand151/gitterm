@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { queryClient, trpc } from "@/utils/trpc";
+import { useState, useEffect, useMemo } from "react";
+import { listenerTrpc, queryClient, trpc } from "@/utils/trpc";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus } from "lucide-react";
+import { AlertCircle, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -46,20 +46,23 @@ export function CreateInstanceDialog() {
   const [repoUrl, setRepoUrl] = useState("");
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState<string>("");
   const [selectedCloudProviderId, setSelectedCloudProviderId] = useState<string>("");
-  const [selectedImageId, setSelectedImageId] = useState<string>("");
-  const [selectedRegion, setSelectedRegion] = useState("us-west-1");
+  const [selectedRegion, setSelectedRegion] = useState<string | undefined>(undefined);
 
   // Fetch dynamic data
   const { data: agentTypesData } = useQuery(trpc.workspace.listAgentTypes.queryOptions());
   const { data: cloudProvidersData } = useQuery(trpc.workspace.listCloudProviders.queryOptions());
   
-  // Fetch images when agent type changes
-  const { data: imagesData } = useQuery(
-    trpc.workspace.listImages.queryOptions(
-      { agentTypeId: selectedAgentTypeId },
-      { enabled: !!selectedAgentTypeId }
-    )
-  );
+
+  // Derive available regions from selected cloud provider
+  const availableRegions = useMemo(() => {
+    if (!selectedCloudProviderId || !cloudProvidersData?.cloudProviders) {
+      return [];
+    }
+    const selectedCloud = cloudProvidersData.cloudProviders.find(
+      (cloud) => cloud.id === selectedCloudProviderId,
+    );
+    return selectedCloud?.regions ?? [];
+  }, [selectedCloudProviderId, cloudProvidersData]);
 
   // Set defaults when data loads
   useEffect(() => {
@@ -74,17 +77,54 @@ export function CreateInstanceDialog() {
     }
   }, [cloudProvidersData, selectedCloudProviderId]);
 
+  // Set default region when cloud provider changes
   useEffect(() => {
-    if (imagesData?.images?.[0]) {
-      setSelectedImageId(imagesData.images[0].id);
+    if (availableRegions.length > 0) {
+      // Only set default if no region is selected or selected region is not in available regions
+      if (!selectedRegion || !availableRegions.some(reg => reg.id === selectedRegion)) {
+        setSelectedRegion(availableRegions[0].id);
+      }
+    } else {
+      setSelectedRegion(undefined);
     }
-  }, [imagesData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableRegions]); // Only react to availableRegions changes (cloud provider changes) 
+
+  const subscribeToWorkspaceStatus = async (workspaceId: string) => {
+    return new Promise<void>((resolve, reject) => {
+      const subscription = listenerTrpc.workspace.status.subscribe(
+        { workspaceId },
+        {
+          onData: (payload) => {
+            if (payload.status === "running") {
+              toast.success("Workspace is ready! Redirecting you now");
+              queryClient.invalidateQueries(trpc.workspace.listWorkspaces.queryOptions());
+
+              console.log(payload.workspaceDomain);
+              subscription.unsubscribe();
+              console.log("Unsubscribed from workspace status");
+              resolve();
+            }
+          },
+          onError: (error) => {
+            console.error(error);
+            toast.error(`Failed to subscribe to workspace status: ${error.message}`);
+            reject(error);
+          },
+        }
+      );
+    });
+  };
 
   const createServiceMutation = useMutation(trpc.railway.createService.mutationOptions({
-    onSuccess: () => {
-      toast.success("Instance creation started");
+    onSuccess: async (data) => {
+      toast.success("Workspace is provisioning");
       setOpen(false);
       queryClient.invalidateQueries(trpc.workspace.listWorkspaces.queryOptions());
+
+      console.log("Subscribing to workspace status", data.workspace.id);
+      await subscribeToWorkspaceStatus(data.workspace.id);
+
     },
     onError: (error) => {
       console.error(error);
@@ -93,21 +133,18 @@ export function CreateInstanceDialog() {
   }));
 
   const handleSubmit = async () => {
-    if (!selectedAgentTypeId || !selectedCloudProviderId || !selectedImageId) {
-      toast.error("Please select an agent, cloud provider, and image.");
+    if (!selectedAgentTypeId || !selectedCloudProviderId || !selectedRegion) {
+      toast.error("Please select an agent, cloud provider, and region.");
       return;
     }
 
-    const result = await createServiceMutation.mutateAsync({
+    await createServiceMutation.mutateAsync({
+      name: repoUrl.split("/").pop() || "new-workspace",
       repo: repoUrl,
-      imageId: selectedImageId,
       agentTypeId: selectedAgentTypeId,
       cloudProviderId: selectedCloudProviderId,
-      region: selectedRegion,
-      name: repoUrl.split("/").pop() || "new-workspace",
+      regionId: selectedRegion,
     });
-
-    window.location.href = `https://${result.workspace.subdomain}.gitterm.dev`;
   };
 
   return (
@@ -169,56 +206,59 @@ export function CreateInstanceDialog() {
                   <SelectValue placeholder="Select cloud" />
                 </SelectTrigger>
                 <SelectContent>
-                  {cloudProvidersData?.cloudProviders?.map((cloud) => (
-                    <SelectItem key={cloud.id} value={cloud.id}>
-                      <div className="flex items-center">
-                        <Image 
-                          src={getIcon(cloud.name)} 
-                          alt={cloud.name} 
-                          width={16} 
-                          height={16} 
-                          className="mr-2 h-4 w-4" 
-                        />
-                        {cloud.name}
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {cloudProvidersData?.cloudProviders && cloudProvidersData.cloudProviders.length > 0 ? (
+                    cloudProvidersData?.cloudProviders?.map((cloud) => (
+                      <SelectItem key={cloud.id} value={cloud.id}>
+                        <div className="flex items-center">
+                          <Image 
+                            src={getIcon(cloud.name)} 
+                            alt={cloud.name} 
+                            width={16} 
+                            height={16} 
+                            className="mr-2 h-4 w-4" 
+                          />
+                          {cloud.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-cloud-providers" disabled>No cloud providers found</SelectItem>
+                  )} 
                 </SelectContent>
               </Select>
             </div>
           </div>
           
-           {/* Optional Image Selection if multiple images exist */}
-           {imagesData?.images && imagesData.images.length > 1 && (
-            <div className="grid gap-2">
-              <Label>Docker Image</Label>
-              <Select value={selectedImageId} onValueChange={setSelectedImageId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select image" />
-                </SelectTrigger>
-                <SelectContent>
-                  {imagesData.images.map((img) => (
-                    <SelectItem key={img.id} value={img.id}>
-                      {img.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
 
           <div className="grid gap-2">
             <Label>Region</Label>
-             <Select value={selectedRegion} onValueChange={setSelectedRegion}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select region" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="us-west-1">US West (Oregon)</SelectItem>
-                  <SelectItem value="us-east-1">US East (N. Virginia)</SelectItem>
-                  <SelectItem value="eu-central-1">Europe (Frankfurt)</SelectItem>
-                </SelectContent>
-              </Select>
+            <Select
+              value={selectedRegion}
+              onValueChange={setSelectedRegion}
+              disabled={availableRegions.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={availableRegions.length > 0 ? "Select region" : "Coming soon"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {availableRegions.length > 0 ? (
+                  availableRegions.map((region) => (
+                    <SelectItem key={region.id} value={region.id}>
+                      {region.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-regions" disabled>
+                    <div className="flex items-center">
+                      <AlertCircle className="mr-2 h-4 w-4" />
+                     Coming soon
+                    </div>
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

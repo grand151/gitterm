@@ -3,16 +3,20 @@ import { protectedProcedure, router } from "../../index";
 import { railway } from "../../service/railway/railway";
 import { db, eq, and } from "@gitpad/db";
 import { workspace, agentWorkspaceConfig, workspaceEnvironmentVariables } from "@gitpad/db/schema/workspace";
-import { image } from "@gitpad/db/schema/cloud";
+import { image, region } from "@gitpad/db/schema/cloud";
 import { TRPCError } from "@trpc/server";
 import { randomUUID } from "crypto";
 
 const PROJECT_ID = process.env.RAILWAY_PROJECT_ID;
+const ENVIRONMENT_ID = process.env.RAILWAY_ENVIRONMENT_ID;
 
 if (!PROJECT_ID) {
   throw new Error("RAILWAY_PROJECT_ID is not set");
 }
 
+if (!ENVIRONMENT_ID) {
+  throw new Error("RAILWAY_ENVIRONMENT_ID is not set");
+}
 export const railwayRouter = router({
   // Create a new service from a GitHub repo
   createService: protectedProcedure
@@ -20,10 +24,9 @@ export const railwayRouter = router({
       z.object({
         name: z.string().optional(),
         repo: z.string(), // e.g. "railwayapp-templates/django",
-        imageId: z.string(),
         agentTypeId: z.string(),
         cloudProviderId: z.string(),
-        region: z.string(),
+        regionId: z.string(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -37,7 +40,7 @@ export const railwayRouter = router({
         const [imageRecord] = await db
           .select()
           .from(image)
-          .where(eq(image.id, input.imageId));
+          .where(eq(image.agentTypeId, input.agentTypeId));
 
         if (!imageRecord) {
            throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid image ID" });
@@ -65,6 +68,12 @@ export const railwayRouter = router({
             )
           );
 
+        const [preferredRegion] = await db.select().from(region).where(eq(region.id, input.regionId));
+
+        if (!preferredRegion) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid region ID" });
+        }
+
         const DEFAULT_DOCKER_ENV_VARS = {
           "REPO_URL": input.repo,
           "OPENCODE_CONFIG_BASE64": agentConfig ? Buffer.from(JSON.stringify(agentConfig.config)).toString("base64") : undefined,
@@ -85,6 +94,19 @@ export const railwayRouter = router({
           throw new Error(`Railway API Error: ${error.message}`);
         });
 
+        await railway.UpdateRegions({
+          environmentId: ENVIRONMENT_ID,
+          serviceId: serviceCreate.id,
+          multiRegionConfig: {
+            [preferredRegion.externalRegionIdentifier]: {
+              "numReplicas": 1,
+            }
+          }
+        }).catch((error) => {
+          console.error("Railway API Error:", error);
+          throw new Error(`Railway API Error: ${error.message}`);
+        });
+
         // Construct internal backend URL (assuming Railway Private Networking)
         // Service name is used as the hostname. Port 7681 is ttyd default.
         const backendUrl = `http://${subdomain}.railway.internal:7681`;
@@ -93,9 +115,9 @@ export const railwayRouter = router({
           id: workspaceId,
           userId,
           externalInstanceId: serviceCreate.id,
-          imageId: input.imageId,
+          imageId: imageRecord.id,
           cloudProviderId: input.cloudProviderId,
-          region: input.region,
+          regionId: preferredRegion.id,
           repositoryUrl: input.repo,
           subdomain: subdomain,
           backendUrl: backendUrl,

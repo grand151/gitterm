@@ -1,6 +1,7 @@
 "use client";
 
-import { trpc } from "@/utils/trpc";
+import { useEffect, useRef } from "react";
+import { listenerTrpc, trpc } from "@/utils/trpc";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,7 @@ export function InstanceList() {
 }
 
 function InstanceCard({ workspace, refetch }: { workspace: any; refetch: () => void }) {
+
   const deleteServiceMutation = useMutation(trpc.railway.deleteService.mutationOptions({
     onSuccess: () => {
       toast.success("Workspace terminated successfully");

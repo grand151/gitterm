@@ -1,12 +1,12 @@
 import z from "zod";
 import { protectedProcedure, router } from "../index";
-import { db, eq, and } from "@gitpad/db";
+import { db, eq, and, asc } from "@gitpad/db";
 import {
   agentWorkspaceConfig,
   workspaceEnvironmentVariables,
   workspace,
 } from "@gitpad/db/schema/workspace";
-import { agentType, image, cloudProvider } from "@gitpad/db/schema/cloud";
+import { agentType, image, cloudProvider, region } from "@gitpad/db/schema/cloud";
 import { TRPCError } from "@trpc/server";
 import { validateAgentConfig } from "@gitpad/schema";
 
@@ -53,12 +53,19 @@ export const workspaceRouter = router({
   // List cloud providers
   listCloudProviders: protectedProcedure.query(async () => {
     try {
-      const providers = await db.select().from(cloudProvider);
+      const providers = await db.query.cloudProvider.findMany({
+        with: {
+          regions: true,
+        },
+        orderBy: [asc(cloudProvider.name)],
+      });
+      
       return {
         success: true,
         cloudProviders: providers,
       };
     } catch (error) {
+      console.error("Failed to fetch cloud providers", error);
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
         message: "Failed to fetch cloud providers",

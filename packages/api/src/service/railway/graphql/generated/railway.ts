@@ -41,6 +41,7 @@ export type AccessRule = {
 export enum ActiveFeatureFlag {
   Buckets = 'BUCKETS',
   BucketFileBrowser = 'BUCKET_FILE_BROWSER',
+  ConversationalUi = 'CONVERSATIONAL_UI',
   EnvironmentRestrictions = 'ENVIRONMENT_RESTRICTIONS',
   GlobalBucketRegion = 'GLOBAL_BUCKET_REGION',
   HttpServiceMetrics = 'HTTP_SERVICE_METRICS',
@@ -56,6 +57,7 @@ export enum ActivePlatformFlag {
   Buckets = 'BUCKETS',
   BuilderV3RolloutExistingServices = 'BUILDER_V3_ROLLOUT_EXISTING_SERVICES',
   BuilderV3RolloutNewServices = 'BUILDER_V3_ROLLOUT_NEW_SERVICES',
+  CtrdImageStoreRollout = 'CTRD_IMAGE_STORE_ROLLOUT',
   DemoPercentageRollout = 'DEMO_PERCENTAGE_ROLLOUT',
   EnableRawSqlQueries = 'ENABLE_RAW_SQL_QUERIES',
   MonorepoSupport = 'MONOREPO_SUPPORT',
@@ -67,6 +69,7 @@ export enum ActivePlatformFlag {
 export enum ActiveServiceFeatureFlag {
   CopyVolumeToEnvironment = 'COPY_VOLUME_TO_ENVIRONMENT',
   Placeholder = 'PLACEHOLDER',
+  UseBuilderV3ForCliDeploys = 'USE_BUILDER_V3_FOR_CLI_DEPLOYS',
   UseGhWebhooksForChangeDetection = 'USE_GH_WEBHOOKS_FOR_CHANGE_DETECTION',
   UseVmRuntime = 'USE_VM_RUNTIME'
 }
@@ -143,14 +146,6 @@ export type AppliedByMember = {
   id: Scalars['String']['output'];
   name?: Maybe<Scalars['String']['output']>;
   username?: Maybe<Scalars['String']['output']>;
-};
-
-export type BanReasonHistory = Node & {
-  __typename?: 'BanReasonHistory';
-  actor?: Maybe<User>;
-  banReason?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['DateTime']['output'];
-  id: Scalars['ID']['output'];
 };
 
 export type BaseEnvironmentOverrideInput = {
@@ -887,6 +882,7 @@ export type ExternalWorkspace = {
   customerState: SubscriptionState;
   discordRole?: Maybe<Scalars['String']['output']>;
   hasBAA: Scalars['Boolean']['output'];
+  hasRBAC: Scalars['Boolean']['output'];
   hasSAML: Scalars['Boolean']['output'];
   id: Scalars['String']['output'];
   isTrialing?: Maybe<Scalars['Boolean']['output']>;
@@ -1163,6 +1159,7 @@ export type Maintenance = {
   __typename?: 'Maintenance';
   id: Scalars['String']['output'];
   message: Scalars['String']['output'];
+  start: Scalars['DateTime']['output'];
   status: MaintenanceStatus;
   url: Scalars['String']['output'];
 };
@@ -2637,6 +2634,7 @@ export enum PlatformFeatureFlag {
   Buckets = 'BUCKETS',
   BuilderV3RolloutExistingServices = 'BUILDER_V3_ROLLOUT_EXISTING_SERVICES',
   BuilderV3RolloutNewServices = 'BUILDER_V3_ROLLOUT_NEW_SERVICES',
+  CtrdImageStoreRollout = 'CTRD_IMAGE_STORE_ROLLOUT',
   DemoPercentageRollout = 'DEMO_PERCENTAGE_ROLLOUT',
   EnableRawSqlQueries = 'ENABLE_RAW_SQL_QUERIES',
   MonorepoSupport = 'MONOREPO_SUPPORT',
@@ -2822,9 +2820,12 @@ export type Project = Node & {
   baseEnvironment?: Maybe<Environment>;
   baseEnvironmentId?: Maybe<Scalars['String']['output']>;
   botPrEnvironments: Scalars['Boolean']['output'];
+  buckets: ProjectBucketsConnection;
   createdAt: Scalars['DateTime']['output'];
   deletedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** @deprecated Use environment.deploymentTriggers for properly scoped access control */
   deploymentTriggers: ProjectDeploymentTriggersConnection;
+  /** @deprecated Use environment.deployments for properly scoped access control */
   deployments: ProjectDeploymentsConnection;
   description?: Maybe<Scalars['String']['output']>;
   environments: ProjectEnvironmentsConnection;
@@ -2850,6 +2851,14 @@ export type Project = Node & {
   volumes: ProjectVolumesConnection;
   workspace?: Maybe<Workspace>;
   workspaceId?: Maybe<Scalars['String']['output']>;
+};
+
+
+export type ProjectBucketsArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  before?: InputMaybe<Scalars['String']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+  last?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -2914,6 +2923,17 @@ export type ProjectVolumesArgs = {
   before?: InputMaybe<Scalars['String']['input']>;
   first?: InputMaybe<Scalars['Int']['input']>;
   last?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type ProjectBucketsConnection = {
+  __typename?: 'ProjectBucketsConnection';
+  edges: Array<ProjectBucketsConnectionEdge>;
+  pageInfo: PageInfo;
+};
+
+export type ProjectBucketsConnectionEdge = {
+  __typename?: 'ProjectBucketsConnectionEdge';
+  cursor: Scalars['String']['output'];
 };
 
 export type ProjectComplianceInfo = {
@@ -3326,8 +3346,6 @@ export type Query = {
   me: User;
   /** Get metrics for a project, environment, and service */
   metrics: Array<MetricsResult>;
-  node?: Maybe<Node>;
-  nodes: Array<Maybe<Node>>;
   /** Gets notification deliveries for the authenticated user */
   notificationDeliveries: QueryNotificationDeliveriesConnection;
   /** Get all observability dashboards for an environment */
@@ -3732,16 +3750,6 @@ export type QueryMetricsArgs = {
   volumeId?: InputMaybe<Scalars['String']['input']>;
   volumeInstanceExternalId?: InputMaybe<Scalars['String']['input']>;
   workspaceId?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryNodeArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryNodesArgs = {
-  ids: Array<Scalars['ID']['input']>;
 };
 
 
@@ -4377,25 +4385,6 @@ export type ReferralUser = {
   status: ReferralStatus;
 };
 
-export type RefundRequest = Node & {
-  __typename?: 'RefundRequest';
-  amount: Scalars['Int']['output'];
-  decision?: Maybe<RefundRequestDecisionEnum>;
-  id: Scalars['ID']['output'];
-  invoiceId: Scalars['String']['output'];
-  plainThreadId?: Maybe<Scalars['String']['output']>;
-  reason: Scalars['String']['output'];
-  userId?: Maybe<Scalars['String']['output']>;
-  workspace: Workspace;
-};
-
-/** Possible decisions for a RefundRequest */
-export enum RefundRequestDecisionEnum {
-  AutoRefunded = 'AUTO_REFUNDED',
-  AutoRejected = 'AUTO_REJECTED',
-  ManuallyRefunded = 'MANUALLY_REFUNDED'
-}
-
 export type Region = {
   __typename?: 'Region';
   /** Region country */
@@ -4438,15 +4427,6 @@ export enum RegistrationStatus {
 export type RegistryCredentialsInput = {
   password: Scalars['String']['input'];
   username: Scalars['String']['input'];
-};
-
-export type ReissuedInvoice = Node & {
-  __typename?: 'ReissuedInvoice';
-  id: Scalars['ID']['output'];
-  originalInvoiceId: Scalars['String']['output'];
-  reissuedInvoiceId?: Maybe<Scalars['String']['output']>;
-  workspace: Workspace;
-  workspaceId: Scalars['String']['output'];
 };
 
 export enum ReplicateVolumeInstanceSnapshotStatus {
@@ -4494,6 +4474,7 @@ export type Service = Node & {
   __typename?: 'Service';
   createdAt: Scalars['DateTime']['output'];
   deletedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** @deprecated Use environment.deployments for properly scoped access control */
   deployments: ServiceDeploymentsConnection;
   featureFlags: Array<ActiveServiceFeatureFlag>;
   icon?: Maybe<Scalars['String']['output']>;
@@ -4502,6 +4483,7 @@ export type Service = Node & {
   project: Project;
   projectId: Scalars['String']['output'];
   repoTriggers: ServiceRepoTriggersConnection;
+  /** @deprecated Use environment.serviceInstances for properly scoped access control */
   serviceInstances: ServiceServiceInstancesConnection;
   templateServiceId?: Maybe<Scalars['String']['output']>;
   templateThreadSlug?: Maybe<Scalars['String']['output']>;
@@ -5207,30 +5189,6 @@ export enum TwoFactorMethodProjectWorkspace {
   Passkey = 'PASSKEY'
 }
 
-export type UsageAnomaly = Node & {
-  __typename?: 'UsageAnomaly';
-  actedOn?: Maybe<Scalars['DateTime']['output']>;
-  action?: Maybe<UsageAnomalyAction>;
-  actorId?: Maybe<Scalars['String']['output']>;
-  flaggedAt: Scalars['DateTime']['output'];
-  flaggedFor: UsageAnomalyFlagReason;
-  id: Scalars['ID']['output'];
-};
-
-/** Possible actions for a UsageAnomaly. */
-export enum UsageAnomalyAction {
-  Allowed = 'ALLOWED',
-  Autobanned = 'AUTOBANNED',
-  Banned = 'BANNED'
-}
-
-/** Possible flag reasons for a UsageAnomaly. */
-export enum UsageAnomalyFlagReason {
-  HighCpuUsage = 'HIGH_CPU_USAGE',
-  HighDiskUsage = 'HIGH_DISK_USAGE',
-  HighNetworkUsage = 'HIGH_NETWORK_USAGE'
-}
-
 export type UsageLimit = Node & {
   __typename?: 'UsageLimit';
   customerId: Scalars['String']['output'];
@@ -5312,21 +5270,6 @@ export type UserFlagsRemoveInput = {
 export type UserFlagsSetInput = {
   flags: Array<UserFlag>;
   userId?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type UserGithubRepo = Node & {
-  __typename?: 'UserGithubRepo';
-  createdAt: Scalars['DateTime']['output'];
-  defaultBranch: Scalars['String']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  fullName: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  installationId: Scalars['String']['output'];
-  isPrivate: Scalars['Boolean']['output'];
-  lastPushedAt: Scalars['DateTime']['output'];
-  name: Scalars['String']['output'];
-  ownerAvatarUrl?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['DateTime']['output'];
 };
 
 export type UserKickbackEarnings = {
@@ -5483,6 +5426,7 @@ export type Volume = Node & {
   name: Scalars['String']['output'];
   project: Project;
   projectId: Scalars['String']['output'];
+  /** @deprecated Use environment.volumeInstances for properly scoped access control */
   volumeInstances: VolumeVolumeInstancesConnection;
 };
 
@@ -5639,47 +5583,11 @@ export type VolumeVolumeInstancesConnectionEdge = {
   node: VolumeInstance;
 };
 
-export type Withdrawal = Node & {
-  __typename?: 'Withdrawal';
-  amount: Scalars['Float']['output'];
-  createdAt: Scalars['DateTime']['output'];
-  customerId: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  status: WithdrawalStatusType;
-  updatedAt: Scalars['DateTime']['output'];
-  withdrawalAccount: WithdrawalAccount;
-  withdrawalAccountId: Scalars['String']['output'];
-};
-
-export type WithdrawalAccount = Node & {
-  __typename?: 'WithdrawalAccount';
-  customerId: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  platform: WithdrawalPlatformTypes;
-  platformDetails: Scalars['String']['output'];
-  stripeConnectInfo?: Maybe<WithdrawalAccountStripeConnectInfo>;
-};
-
-export type WithdrawalAccountStripeConnectInfo = {
-  __typename?: 'WithdrawalAccountStripeConnectInfo';
-  bankLast4?: Maybe<Scalars['String']['output']>;
-  cardLast4?: Maybe<Scalars['String']['output']>;
-  hasOnboarded: Scalars['Boolean']['output'];
-  needsAttention: Scalars['Boolean']['output'];
-};
-
 export enum WithdrawalPlatformTypes {
   Bmac = 'BMAC',
   Github = 'GITHUB',
   Paypal = 'PAYPAL',
   StripeConnect = 'STRIPE_CONNECT'
-}
-
-export enum WithdrawalStatusType {
-  Cancelled = 'CANCELLED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Pending = 'PENDING'
 }
 
 export type WorkflowId = {
@@ -5929,6 +5837,15 @@ export type ServiceDomainCreateMutationVariables = Exact<{
 
 export type ServiceDomainCreateMutation = { __typename?: 'Mutation', serviceDomainCreate: { __typename?: 'ServiceDomain', id: string, domain: string, serviceId: string, createdAt?: any | null, updatedAt?: any | null } };
 
+export type UpdateRegionsMutationVariables = Exact<{
+  environmentId: Scalars['String']['input'];
+  serviceId: Scalars['String']['input'];
+  multiRegionConfig: Scalars['JSON']['input'];
+}>;
+
+
+export type UpdateRegionsMutation = { __typename?: 'Mutation', serviceInstanceUpdate: boolean };
+
 
 export const MeDocument = `
     query Me {
@@ -6085,6 +6002,15 @@ export const ServiceDomainCreateDocument = `
   }
 }
     `;
+export const UpdateRegionsDocument = `
+    mutation UpdateRegions($environmentId: String!, $serviceId: String!, $multiRegionConfig: JSON!) {
+  serviceInstanceUpdate(
+    environmentId: $environmentId
+    serviceId: $serviceId
+    input: {multiRegionConfig: $multiRegionConfig}
+  )
+}
+    `;
 export type Requester<C = {}> = <R, V>(doc: string, vars?: V, options?: C) => Promise<R> | AsyncIterable<R>
 export function getSdk<C>(requester: Requester<C>) {
   return {
@@ -6123,6 +6049,9 @@ export function getSdk<C>(requester: Requester<C>) {
     },
     ServiceDomainCreate(variables: ServiceDomainCreateMutationVariables, options?: C): Promise<ServiceDomainCreateMutation> {
       return requester<ServiceDomainCreateMutation, ServiceDomainCreateMutationVariables>(ServiceDomainCreateDocument, variables, options) as Promise<ServiceDomainCreateMutation>;
+    },
+    UpdateRegions(variables: UpdateRegionsMutationVariables, options?: C): Promise<UpdateRegionsMutation> {
+      return requester<UpdateRegionsMutation, UpdateRegionsMutationVariables>(UpdateRegionsDocument, variables, options) as Promise<UpdateRegionsMutation>;
     }
   };
 }

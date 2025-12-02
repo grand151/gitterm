@@ -1,3 +1,4 @@
-- Authentication on the Terminal UI
 - Handling and Noticing GIT operations (user pushing to their own repo -> changing remote)
+    - Show this on a sort of Header so they can decide to push from there
 - Scheduling deletion of service if not being used.
+- Limiting user to one
