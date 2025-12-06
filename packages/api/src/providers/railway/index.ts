@@ -26,9 +26,9 @@ export class RailwayProvider implements ComputeProvider {
       input: {
         projectId: PROJECT_ID,
         name: config.subdomain,
-        source: {
-          image: config.imageId,
-        },
+        // source: {
+        //   image: config.imageId,
+        // },
         variables: config.environmentVariables,
       },
     }).catch(async (error) => {
@@ -54,31 +54,40 @@ export class RailwayProvider implements ComputeProvider {
       throw new Error("No deployment found");
     }
 
-    // Redeploy the deplyoment after volume creation to ensure the volume is attached to the service
-    await railway.DeploymentRemove({ id: deploymentId }).catch(async (error) => {
-      console.error("Railway API Error (DeploymentRemove):", error);
-      throw new Error(`Railway API Error (DeploymentRemove): ${error.message}`);
-    });
+    // // Redeploy the deplyoment after volume creation to ensure the volume is attached to the service
+    // await railway.DeploymentRemove({ id: deploymentId }).catch(async (error) => {
+    //   console.error("Railway API Error (DeploymentRemove):", error);
+    //   throw new Error(`Railway API Error (DeploymentRemove): ${error.message}`);
+    // });
 
 
-    await railway.DeploymentRedeploy({ id: deploymentId }).catch(async (error) => {
-      console.error("Railway API Error (DeploymentRedeploy):", error);
-      throw new Error(`Railway API Error (DeploymentRedeploy): ${error.message}`);
-    });
+    // await railway.DeploymentRedeploy({ id: deploymentId }).catch(async (error) => {
+    //   console.error("Railway API Error (DeploymentRedeploy):", error);
+    //   throw new Error(`Railway API Error (DeploymentRedeploy): ${error.message}`);
+    // });
 
-    await railway.UpdateRegions({
-      environmentId: ENVIRONMENT_ID,
+    // await railway.UpdateRegions({
+    //   environmentId: ENVIRONMENT_ID,
+    //   serviceId: serviceCreate.id,
+    //   multiRegionConfig: {
+    //     [config.regionIdentifier]: {
+    //       numReplicas: 1,
+    //     },
+    //   },
+    // }).catch(async (error) => {
+    //   console.error("Railway API Error (UpdateRegions):", error);
+    //   await railway.ServiceDelete({ id: serviceCreate.id })
+    //   await railway.VolumeDelete({ id: volumeCreate.id })
+    //   throw new Error(`Railway API Error (UpdateRegions): ${error.message}`);
+    // });
+
+    await railway.serviceInstanceUpdate({
       serviceId: serviceCreate.id,
-      multiRegionConfig: {
-        [config.regionIdentifier]: {
-          numReplicas: 1,
-        },
-      },
+      image: config.imageId,
+      region: config.regionIdentifier,
     }).catch(async (error) => {
-      console.error("Railway API Error (UpdateRegions):", error);
-      await railway.ServiceDelete({ id: serviceCreate.id })
-      await railway.VolumeDelete({ id: volumeCreate.id })
-      throw new Error(`Railway API Error (UpdateRegions): ${error.message}`);
+      console.error("Railway API Error (serviceInstanceUpdate):", error);
+      throw new Error(`Railway API Error (serviceInstanceUpdate): ${error.message}`);
     });
 
     const backendUrl = `http://${config.subdomain}.railway.internal:7681`;
