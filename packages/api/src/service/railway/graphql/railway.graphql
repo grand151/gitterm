@@ -167,6 +167,11 @@ mutation ServiceDomainCreate($input: ServiceDomainCreateInput!) {
   }
 }
 
+mutation serviceInstanceUpdate($serviceId: String!, $image: String!, $region: String!) {
+  serviceInstanceUpdate(input: {source: {image: $image}, region: $region}, serviceId: $serviceId)
+}
+
+
 mutation UpdateRegions($environmentId: String!, $serviceId: String!, $multiRegionConfig: JSON!) {
   serviceInstanceUpdate(
     environmentId: $environmentId
