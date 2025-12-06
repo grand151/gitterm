@@ -154,7 +154,7 @@ export function GitHubConnection() {
                   Redirecting to GitHub...
                 </>
               ) : (
-                <a href={`https://github.com/apps/${GITHUB_APP_NAME}/installations/new`}>
+                <a href={`https://github.com/apps/${GITHUB_APP_NAME}/installations/new?redirect_uri=${process.env.NEXT_PUBLIC_WEB_URL}/api/github/callback`}>
                   Connect GitHub App
                 </a>
               )}
