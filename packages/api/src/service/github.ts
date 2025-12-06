@@ -3,17 +3,6 @@ import { createAppAuth } from "@octokit/auth-app";
 import { db, eq, and } from "@gitpad/db";
 import { githubAppInstallation, gitIntegration } from "@gitpad/db/schema/integrations";
 
-const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
-const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
-
-if (!GITHUB_APP_ID) {
-  throw new Error("GITHUB_APP_ID is required for GitHub App integration");
-}
-
-if (!GITHUB_APP_PRIVATE_KEY) {
-  throw new Error("GITHUB_APP_PRIVATE_KEY is required for GitHub App integration");
-}
-
 /**
  * Decode the private key if it's base64 encoded
  */
@@ -50,6 +39,17 @@ export class GitHubAppService {
   private appOctokit: Octokit;
 
   constructor() {
+    const GITHUB_APP_ID = process.env.GITHUB_APP_ID;
+    const GITHUB_APP_PRIVATE_KEY = process.env.GITHUB_APP_PRIVATE_KEY;
+
+    if (!GITHUB_APP_ID) {
+      throw new Error("GITHUB_APP_ID is required for GitHub App integration");
+    }
+
+    if (!GITHUB_APP_PRIVATE_KEY) {
+      throw new Error("GITHUB_APP_PRIVATE_KEY is required for GitHub App integration");
+    }
+
     // Decode and prepare the private key
     const privateKey = decodePrivateKey(GITHUB_APP_PRIVATE_KEY!);
     
