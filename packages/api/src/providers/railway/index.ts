@@ -81,7 +81,8 @@ export class RailwayProvider implements ComputeProvider {
     //   throw new Error(`Railway API Error (UpdateRegions): ${error.message}`);
     // });
 
-    await railway.serviceInstanceUpdate({
+    await railway.serviceInstanceUpdateAndDeploy({
+      environmentId: ENVIRONMENT_ID,
       serviceId: serviceCreate.id,
       image: config.imageId,
       region: config.regionIdentifier,
