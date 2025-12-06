@@ -10,6 +10,7 @@ export const sessionStopSourceEnum = pgEnum('session_stop_source', ['manual', 'i
 export const workspace = pgTable("workspace", {
 	id: uuid("id").primaryKey().defaultRandom(),
 	externalInstanceId: text("external_instance_id").notNull(),
+	externalRunningDeploymentId: text("external_running_deployment_id"),
     userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
 	imageId: uuid("image_id").notNull().references(() => image.id, { onDelete: "cascade" }),
 	cloudProviderId: uuid("cloud_provider_id").notNull().references(() => cloudProvider.id, { onDelete: "cascade" }),
@@ -21,9 +22,22 @@ export const workspace = pgTable("workspace", {
     status: workspaceStatusEnum("status").notNull(),
 	startedAt: timestamp("started_at").notNull(),
 	stoppedAt: timestamp("stopped_at"),
+	terminatedAt: timestamp("terminated_at"),
 	lastActiveAt: timestamp("last_active_at"),
 	updatedAt: timestamp("updated_at").notNull(),
 });
+
+export const volume = pgTable("volume", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	workspaceId: uuid("workspace_id").notNull().references(() => workspace.id, { onDelete: "cascade" }),
+	userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+	cloudProviderId: uuid("cloud_provider_id").notNull().references(() => cloudProvider.id, { onDelete: "cascade" }),
+	regionId: uuid("region_id").notNull().references(() => region.id, { onDelete: "cascade" }),
+	externalVolumeId: text("external_volume_id").notNull(),
+	mountPath: text("mount_path").notNull(),
+	createdAt: timestamp("created_at").notNull().defaultNow(),
+	updatedAt: timestamp("updated_at").notNull().defaultNow(),
+})
 
 // Tracks each usage session (start → stop) for billing
 export const usageSession = pgTable("usage_session", {
@@ -70,6 +84,10 @@ export const workspaceRelations = relations(workspace, ({ one, many }) => ({
 		fields: [workspace.regionId],
 		references: [region.id],
 	}),
+	volume: one(volume, {
+		fields: [workspace.id],
+		references: [volume.workspaceId],
+	}),
 	usageSessions: many(usageSession),
 }));
 
@@ -77,6 +95,21 @@ export const usageSessionRelations = relations(usageSession, ({ one }) => ({
 	workspace: one(workspace, {
 		fields: [usageSession.workspaceId],
 		references: [workspace.id],
+	}),
+}));
+
+export const volumeRelations = relations(volume, ({ one }) => ({
+	workspace: one(workspace, {
+		fields: [volume.workspaceId],
+		references: [workspace.id],
+	}),
+	cloudProvider: one(cloudProvider, {
+		fields: [volume.cloudProviderId],
+		references: [cloudProvider.id],
+	}),
+	region: one(region, {
+		fields: [volume.regionId],
+		references: [region.id],
 	}),
 }));
 

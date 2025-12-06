@@ -39,28 +39,26 @@ export type AccessRule = {
 };
 
 export enum ActiveFeatureFlag {
-  Buckets = 'BUCKETS',
   BucketFileBrowser = 'BUCKET_FILE_BROWSER',
   ConversationalUi = 'CONVERSATIONAL_UI',
-  EnvironmentRestrictions = 'ENVIRONMENT_RESTRICTIONS',
-  GlobalBucketRegion = 'GLOBAL_BUCKET_REGION',
   HttpServiceMetrics = 'HTTP_SERVICE_METRICS',
   MagicConfig = 'MAGIC_CONFIG',
   MonorepoSupport = 'MONOREPO_SUPPORT',
   PriorityBoarding = 'PRIORITY_BOARDING',
-  RawSqlQueries = 'RAW_SQL_QUERIES',
-  UnifiedTemplateEditor = 'UNIFIED_TEMPLATE_EDITOR'
+  RawSqlQueries = 'RAW_SQL_QUERIES'
 }
 
 export enum ActivePlatformFlag {
   AllowReplicaMetrics = 'ALLOW_REPLICA_METRICS',
-  Buckets = 'BUCKETS',
   BuilderV3RolloutExistingServices = 'BUILDER_V3_ROLLOUT_EXISTING_SERVICES',
+  BuilderV3RolloutExistingServicesPro = 'BUILDER_V3_ROLLOUT_EXISTING_SERVICES_PRO',
   BuilderV3RolloutNewServices = 'BUILDER_V3_ROLLOUT_NEW_SERVICES',
+  BuilderV3RolloutNewServicesPro = 'BUILDER_V3_ROLLOUT_NEW_SERVICES_PRO',
   CtrdImageStoreRollout = 'CTRD_IMAGE_STORE_ROLLOUT',
   DemoPercentageRollout = 'DEMO_PERCENTAGE_ROLLOUT',
   EnableRawSqlQueries = 'ENABLE_RAW_SQL_QUERIES',
   MonorepoSupport = 'MONOREPO_SUPPORT',
+  SplitUsageQueries = 'SPLIT_USAGE_QUERIES',
   UpdatedVmQueries = 'UPDATED_VM_QUERIES',
   UseGhWebhooksForChangeDetection = 'USE_GH_WEBHOOKS_FOR_CHANGE_DETECTION',
   VmTimeRangeQuery = 'VM_TIME_RANGE_QUERY'
@@ -2631,13 +2629,15 @@ export type PlanLimitOverride = Node & {
 
 export enum PlatformFeatureFlag {
   AllowReplicaMetrics = 'ALLOW_REPLICA_METRICS',
-  Buckets = 'BUCKETS',
   BuilderV3RolloutExistingServices = 'BUILDER_V3_ROLLOUT_EXISTING_SERVICES',
+  BuilderV3RolloutExistingServicesPro = 'BUILDER_V3_ROLLOUT_EXISTING_SERVICES_PRO',
   BuilderV3RolloutNewServices = 'BUILDER_V3_ROLLOUT_NEW_SERVICES',
+  BuilderV3RolloutNewServicesPro = 'BUILDER_V3_ROLLOUT_NEW_SERVICES_PRO',
   CtrdImageStoreRollout = 'CTRD_IMAGE_STORE_ROLLOUT',
   DemoPercentageRollout = 'DEMO_PERCENTAGE_ROLLOUT',
   EnableRawSqlQueries = 'ENABLE_RAW_SQL_QUERIES',
   MonorepoSupport = 'MONOREPO_SUPPORT',
+  SplitUsageQueries = 'SPLIT_USAGE_QUERIES',
   UpdatedVmQueries = 'UPDATED_VM_QUERIES',
   UseGhWebhooksForChangeDetection = 'USE_GH_WEBHOOKS_FOR_CHANGE_DETECTION',
   VmTimeRangeQuery = 'VM_TIME_RANGE_QUERY'
@@ -5823,6 +5823,13 @@ export type DeploymentRedeployMutationVariables = Exact<{
 
 export type DeploymentRedeployMutation = { __typename?: 'Mutation', deploymentRedeploy: { __typename?: 'Deployment', id: string, status: DeploymentStatus, createdAt: any } };
 
+export type DeploymentRemoveMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeploymentRemoveMutation = { __typename?: 'Mutation', deploymentRemove: boolean };
+
 export type TcpProxyCreateMutationVariables = Exact<{
   input: TcpProxyCreateInput;
 }>;
@@ -5845,6 +5852,41 @@ export type UpdateRegionsMutationVariables = Exact<{
 
 
 export type UpdateRegionsMutation = { __typename?: 'Mutation', serviceInstanceUpdate: boolean };
+
+export type VolumeCreateMutationVariables = Exact<{
+  projectId: Scalars['String']['input'];
+  environmentId: Scalars['String']['input'];
+  serviceId: Scalars['String']['input'];
+  mountPath: Scalars['String']['input'];
+  region: Scalars['String']['input'];
+}>;
+
+
+export type VolumeCreateMutation = { __typename?: 'Mutation', volumeCreate: { __typename?: 'Volume', id: string, name: string, createdAt: any } };
+
+export type VolumeAttachMutationVariables = Exact<{
+  environmentId: Scalars['String']['input'];
+  volumeId: Scalars['String']['input'];
+  serviceId: Scalars['String']['input'];
+}>;
+
+
+export type VolumeAttachMutation = { __typename?: 'Mutation', volumeInstanceUpdate: boolean };
+
+export type VolumeDetachMutationVariables = Exact<{
+  environmentId: Scalars['String']['input'];
+  volumeId: Scalars['String']['input'];
+}>;
+
+
+export type VolumeDetachMutation = { __typename?: 'Mutation', volumeInstanceUpdate: boolean };
+
+export type VolumeDeleteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type VolumeDeleteMutation = { __typename?: 'Mutation', volumeDelete: boolean };
 
 
 export const MeDocument = `
@@ -5977,6 +6019,11 @@ export const DeploymentRedeployDocument = `
   }
 }
     `;
+export const DeploymentRemoveDocument = `
+    mutation DeploymentRemove($id: String!) {
+  deploymentRemove(id: $id)
+}
+    `;
 export const TcpProxyCreateDocument = `
     mutation TcpProxyCreate($input: TCPProxyCreateInput!) {
   tcpProxyCreate(input: $input) {
@@ -6009,6 +6056,40 @@ export const UpdateRegionsDocument = `
     serviceId: $serviceId
     input: {multiRegionConfig: $multiRegionConfig}
   )
+}
+    `;
+export const VolumeCreateDocument = `
+    mutation VolumeCreate($projectId: String!, $environmentId: String!, $serviceId: String!, $mountPath: String!, $region: String!) {
+  volumeCreate(
+    input: {projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId, mountPath: $mountPath, region: $region}
+  ) {
+    id
+    name
+    createdAt
+  }
+}
+    `;
+export const VolumeAttachDocument = `
+    mutation VolumeAttach($environmentId: String!, $volumeId: String!, $serviceId: String!) {
+  volumeInstanceUpdate(
+    input: {serviceId: $serviceId}
+    environmentId: $environmentId
+    volumeId: $volumeId
+  )
+}
+    `;
+export const VolumeDetachDocument = `
+    mutation VolumeDetach($environmentId: String!, $volumeId: String!) {
+  volumeInstanceUpdate(
+    input: {serviceId: null}
+    environmentId: $environmentId
+    volumeId: $volumeId
+  )
+}
+    `;
+export const VolumeDeleteDocument = `
+    mutation VolumeDelete($id: String!) {
+  volumeDelete(volumeId: $id)
 }
     `;
 export type Requester<C = {}> = <R, V>(doc: string, vars?: V, options?: C) => Promise<R> | AsyncIterable<R>
@@ -6044,6 +6125,9 @@ export function getSdk<C>(requester: Requester<C>) {
     DeploymentRedeploy(variables: DeploymentRedeployMutationVariables, options?: C): Promise<DeploymentRedeployMutation> {
       return requester<DeploymentRedeployMutation, DeploymentRedeployMutationVariables>(DeploymentRedeployDocument, variables, options) as Promise<DeploymentRedeployMutation>;
     },
+    DeploymentRemove(variables: DeploymentRemoveMutationVariables, options?: C): Promise<DeploymentRemoveMutation> {
+      return requester<DeploymentRemoveMutation, DeploymentRemoveMutationVariables>(DeploymentRemoveDocument, variables, options) as Promise<DeploymentRemoveMutation>;
+    },
     TcpProxyCreate(variables: TcpProxyCreateMutationVariables, options?: C): Promise<TcpProxyCreateMutation> {
       return requester<TcpProxyCreateMutation, TcpProxyCreateMutationVariables>(TcpProxyCreateDocument, variables, options) as Promise<TcpProxyCreateMutation>;
     },
@@ -6052,6 +6136,18 @@ export function getSdk<C>(requester: Requester<C>) {
     },
     UpdateRegions(variables: UpdateRegionsMutationVariables, options?: C): Promise<UpdateRegionsMutation> {
       return requester<UpdateRegionsMutation, UpdateRegionsMutationVariables>(UpdateRegionsDocument, variables, options) as Promise<UpdateRegionsMutation>;
+    },
+    VolumeCreate(variables: VolumeCreateMutationVariables, options?: C): Promise<VolumeCreateMutation> {
+      return requester<VolumeCreateMutation, VolumeCreateMutationVariables>(VolumeCreateDocument, variables, options) as Promise<VolumeCreateMutation>;
+    },
+    VolumeAttach(variables: VolumeAttachMutationVariables, options?: C): Promise<VolumeAttachMutation> {
+      return requester<VolumeAttachMutation, VolumeAttachMutationVariables>(VolumeAttachDocument, variables, options) as Promise<VolumeAttachMutation>;
+    },
+    VolumeDetach(variables: VolumeDetachMutationVariables, options?: C): Promise<VolumeDetachMutation> {
+      return requester<VolumeDetachMutation, VolumeDetachMutationVariables>(VolumeDetachDocument, variables, options) as Promise<VolumeDetachMutation>;
+    },
+    VolumeDelete(variables: VolumeDeleteMutationVariables, options?: C): Promise<VolumeDeleteMutation> {
+      return requester<VolumeDeleteMutation, VolumeDeleteMutationVariables>(VolumeDeleteDocument, variables, options) as Promise<VolumeDeleteMutation>;
     }
   };
 }

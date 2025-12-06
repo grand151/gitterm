@@ -3,7 +3,10 @@ import { railwayRouter } from "./railway/railway";
 import { railwayWebhookRouter } from "./railway/webhook";
 import { workspaceRouter } from "./workspace";
 import { workspaceEventsRouter } from "./workspace/events";
+import { workspaceOperationsRouter } from "./workspace/operations";
 import { internalRouter } from "./internal";
+import { githubRouter } from "./github/github";
+import { githubWebhookRouter } from "./github/webhook";
 
 export const appRouter = router({
 	healthCheck: publicProcedure.query(() => {
@@ -18,11 +21,14 @@ export const appRouter = router({
 	railway: railwayRouter,
 	workspace: workspaceRouter,
 	internal: internalRouter,
+	github: githubRouter,
+	workspaceOps: workspaceOperationsRouter, // Workspace-authenticated operations
 });
 export type AppRouter = typeof appRouter;
 
 export const listenerRouter = router({
 	railway: railwayWebhookRouter,
 	workspace: workspaceEventsRouter,
+	github: githubWebhookRouter,
 });
 export type ListenerRouter = typeof listenerRouter;

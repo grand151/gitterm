@@ -16,10 +16,12 @@ export interface WorkspaceConfig {
 }
 
 export interface WorkspaceInfo {
-  externalId: string;
+  externalServiceId: string;
+  externalVolumeId: string;
   backendUrl: string;
   domain: string;
-  createdAt: Date;
+  serviceCreatedAt: Date;
+  volumeCreatedAt?: Date;
 }
 
 export interface WorkspaceStatusResult {
@@ -34,14 +36,14 @@ export interface ComputeProvider {
   readonly name: string;
 
   /**
-   * Start/create a new workspace instance
+   * Create a new workspace instance
    */
-  startWorkspace(config: WorkspaceConfig): Promise<WorkspaceInfo>;
+  createWorkspace(config: WorkspaceConfig): Promise<WorkspaceInfo>;
 
   /**
    * Stop a workspace (scale to 0 replicas, but keep resources)
    */
-  stopWorkspace(externalId: string, regionIdentifier: string): Promise<void>;
+  stopWorkspace(externalId: string, regionIdentifier: string, externalRunningDeploymentId?: string): Promise<void>;
 
   /**
    * Restart a stopped workspace (scale back up)
@@ -51,7 +53,7 @@ export interface ComputeProvider {
   /**
    * Permanently delete/terminate a workspace
    */
-  terminateWorkspace(externalId: string): Promise<void>;
+  terminateWorkspace(externalServiceId: string, externalVolumeId: string): Promise<void>;
 
   /**
    * Get current status of a workspace

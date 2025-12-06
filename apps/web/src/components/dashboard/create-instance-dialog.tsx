@@ -115,7 +115,7 @@ export function CreateInstanceDialog() {
     });
   };
 
-  const createServiceMutation = useMutation(trpc.railway.createService.mutationOptions({
+  const createServiceMutation = useMutation(trpc.workspace.createWorkspace.mutationOptions({
     onSuccess: async (data) => {
       toast.success("Workspace is provisioning");
       setOpen(false);

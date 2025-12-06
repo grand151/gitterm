@@ -72,6 +72,7 @@ export const railwayWebhookRouter = router({
         const updatedWorkspaces = await db.update(workspace).set({
             status: "running",
             updatedAt: new Date(input.timestamp),
+            externalRunningDeploymentId: input.resource.deployment?.id
         }).where(and(
           eq(workspace.cloudProviderId, railwayProvider.id),
           eq(workspace.externalInstanceId, serviceId),

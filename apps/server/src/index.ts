@@ -52,7 +52,6 @@ app.get("/", (c) => {
 
 export default {
 	fetch: app.fetch,
-	hostname: "::"
+	hostname: "::",
+	port: process.env.PORT ? parseInt(process.env.PORT) : 8080,
 };
-
-// export default app;
