@@ -1190,7 +1190,8 @@ export const workspaceRouter = router({
         const computeProvider = await getProviderByCloudProviderId(provider.name);
         await computeProvider.restartWorkspace(
           existingWorkspace.externalInstanceId,
-          workspaceRegion.externalRegionIdentifier
+          workspaceRegion.externalRegionIdentifier,
+          existingWorkspace.externalRunningDeploymentId ?? undefined
         );
 
         // Update workspace status

@@ -48,7 +48,7 @@ export interface ComputeProvider {
   /**
    * Restart a stopped workspace (scale back up)
    */
-  restartWorkspace(externalId: string, regionIdentifier: string): Promise<void>;
+  restartWorkspace(externalId: string, regionIdentifier: string, externalRunningDeploymentId?: string): Promise<void>;
 
   /**
    * Permanently delete/terminate a workspace
