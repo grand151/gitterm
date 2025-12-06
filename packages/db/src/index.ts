@@ -9,8 +9,9 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import * as authSchema from "./schema/auth";
 import * as cloudSchema from "./schema/cloud";
 import * as workspaceSchema from "./schema/workspace";
+import * as integrationsSchema from "./schema/integrations";
 
-export const db = drizzle(process.env.DATABASE_URL || "", { schema: { ...authSchema, ...cloudSchema, ...workspaceSchema } } );
+export const db = drizzle(process.env.DATABASE_URL || "", { schema: { ...authSchema, ...cloudSchema, ...workspaceSchema, ...integrationsSchema } } );
 
 export {
 	eq,

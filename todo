@@ -1,10 +1,10 @@
-- Handling and Noticing GIT operations (user pushing to their own repo -> changing remote)
-    - Show this on a sort of Header so they can decide to push from there
-    - Implement Functionality
-        - Understand Github Flow, also logging in on the instances
-        - FORK
-        - Commiting
-        - Pushing
+✅ COMPLETED - Handling and Noticing GIT operations (user pushing to their own repo -> changing remote)
+    ✅ Show this on a sort of Header so they can decide to push from there
+    ✅ Implement Functionality
+        ✅ Understand Github Flow, also logging in on the instances
+        ✅ FORK - Implemented with GitHub App
+        ✅ Commiting - Custom HTTP endpoint
+        ✅ Pushing - Custom HTTP endpoint with JWT auth
 
 - Scheduling deletion of service if not being used.
 

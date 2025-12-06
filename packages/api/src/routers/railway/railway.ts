@@ -3,10 +3,13 @@ import { protectedProcedure, router } from "../../index";
 import { db, eq, and } from "@gitpad/db";
 import { workspace, agentWorkspaceConfig, workspaceEnvironmentVariables, volume } from "@gitpad/db/schema/workspace";
 import { image, region } from "@gitpad/db/schema/cloud";
+import { user } from "@gitpad/db/schema/auth";
 import { TRPCError } from "@trpc/server";
 import { randomUUID } from "crypto";
 import { hasRemainingQuota, createUsageSession, closeUsageSession } from "../../utils/metering";
 import { RailwayProvider } from "../../providers/railway";
+import { githubAppService } from "../../service/github";
+import { workspaceJWT } from "../../service/workspace-jwt";
 
 const PROJECT_ID = process.env.RAILWAY_PROJECT_ID;
 const ENVIRONMENT_ID = process.env.RAILWAY_ENVIRONMENT_ID;
@@ -87,9 +90,54 @@ export const railwayRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid region ID" });
         }
 
+        // Get GitHub username from user.name (set during OAuth)
+        const [userRecord] = await db
+          .select()
+          .from(user)
+          .where(eq(user.id, userId));
+
+        const githubUsername = userRecord?.name;
+
+        // Get GitHub App installation and generate token
+        let githubAppToken: string | undefined;
+        let githubAppTokenExpiry: string | undefined;
+        
+        const installation = await githubAppService.getUserInstallation(userId);
+        if (installation && !installation.suspended) {
+          try {
+            const tokenData = await githubAppService.getUserToServerToken(installation.installationId);
+            githubAppToken = tokenData.token;
+            githubAppTokenExpiry = tokenData.expiresAt;
+          } catch (error) {
+            console.error("Failed to generate GitHub App token:", error);
+            // Continue without token - user can still use workspace without git operations
+          }
+        }
+
+        // Parse repo URL to get owner/name
+        const repoInfo = input.repo ? githubAppService.parseRepoUrl(input.repo) : null;
+
+        // Generate workspace-scoped JWT token (replaces shared INTERNAL_API_KEY)
+        const workspaceAuthToken = workspaceJWT.generateToken(
+          workspaceId,
+          userId,
+          ['git:*', 'git:fork', 'git:refresh'] // All git scopes
+        );
+
+        // API endpoint for workspace operations
+        const WORKSPACE_API_URL = process.env.WORKSPACE_API_URL || process.env.INTERNAL_API_URL || "https://api.gitterm.dev/trpc";
+
         const DEFAULT_DOCKER_ENV_VARS = {
           "REPO_URL": input.repo,
           "OPENCODE_CONFIG_BASE64": agentConfig ? Buffer.from(JSON.stringify(agentConfig.config)).toString("base64") : undefined,
+          "USER_GITHUB_USERNAME": githubUsername,
+          "GITHUB_APP_TOKEN": githubAppToken,
+          "GITHUB_APP_TOKEN_EXPIRY": githubAppTokenExpiry,
+          "REPO_OWNER": repoInfo?.owner,
+          "REPO_NAME": repoInfo?.repo,
+          "WORKSPACE_ID": workspaceId,
+          "WORKSPACE_AUTH_TOKEN": workspaceAuthToken, // JWT instead of shared key
+          "WORKSPACE_API_URL": WORKSPACE_API_URL,
           ...(userWorkspaceEnvironmentVariables ? userWorkspaceEnvironmentVariables.environmentVariables as any : {}),
         }
 

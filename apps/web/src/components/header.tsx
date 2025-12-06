@@ -15,6 +15,7 @@ export function Header() {
 	const links = [
 		{ to: "/", label: "Home", signedIn: false },
 		{ to: "/dashboard", label: "Dashboard", signedIn: true },
+		{ to: "/dashboard/integrations", label: "Integrations", signedIn: true },
 		{ to: "/dashboard/profile", label: "Usage", signedIn: true },
 	] as const;
 

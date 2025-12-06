@@ -13,9 +13,16 @@ export async function createContext({ context }: CreateContextOptions) {
 	// Extract internal API key for service-to-service auth
 	const internalApiKey = context.req.raw.headers.get("x-internal-key");
 	
+	// Extract workspace JWT token from Authorization header
+	const authHeader = context.req.raw.headers.get("authorization");
+	const workspaceToken = authHeader?.startsWith("Bearer ") 
+		? authHeader.substring(7) 
+		: undefined;
+	
 	return {
 		session,
 		internalApiKey,
+		workspaceToken,
 	};
 }
 

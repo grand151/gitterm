@@ -63,7 +63,7 @@ export function InstanceList() {
 }
 
 function InstanceCard({ workspace, providers }: { workspace: any; providers: any[] }) {
-  const deleteServiceMutation = useMutation(trpc.railway.deleteService.mutationOptions({
+  const deleteServiceMutation = useMutation(trpc.workspace.deleteWorkspace.mutationOptions({
     onSuccess: () => {
       toast.success("Workspace terminated successfully");
       queryClient.invalidateQueries(trpc.workspace.listWorkspaces.queryOptions());

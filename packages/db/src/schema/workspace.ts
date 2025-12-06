@@ -103,6 +103,14 @@ export const volumeRelations = relations(volume, ({ one }) => ({
 		fields: [volume.workspaceId],
 		references: [workspace.id],
 	}),
+	cloudProvider: one(cloudProvider, {
+		fields: [volume.cloudProviderId],
+		references: [cloudProvider.id],
+	}),
+	region: one(region, {
+		fields: [volume.regionId],
+		references: [region.id],
+	}),
 }));
 
 export type NewWorkspace = typeof workspace.$inferInsert;

@@ -1,5 +1,6 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import type { Context } from "./context";
+import { workspaceJWT } from "./service/workspace-jwt";
 
 // Internal service API key for service-to-service communication
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
@@ -59,4 +60,49 @@ export const internalProcedure = t.procedure.use(({ ctx, next }) => {
 	}
 	
 	return next({ ctx });
+});
+
+/**
+ * Workspace-authenticated procedure
+ * Uses JWT tokens for workspace-to-backend communication
+ * Validates token and extracts workspace/user info
+ * 
+ * NOTE: This is separate from user session authentication
+ * - User sessions: Cookie-based (better-auth)
+ * - Workspace auth: Bearer token in Authorization header
+ */
+export const workspaceAuthProcedure = t.procedure.use(({ ctx, next }) => {
+	const token = ctx.workspaceToken;
+	
+	if (!token) {
+		throw new TRPCError({
+			code: "UNAUTHORIZED",
+			message: "Workspace authentication token required",
+		});
+	}
+	
+	// Ensure this is NOT a user session request
+	// Workspace requests should not have user sessions
+	if (ctx.session) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Workspace endpoints cannot be called with user session. Use workspace JWT token only.",
+		});
+	}
+	
+	try {
+		const payload = workspaceJWT.verifyToken(token);
+		
+		return next({
+			ctx: {
+				...ctx,
+				workspaceAuth: payload,
+			},
+		});
+	} catch (error) {
+		throw new TRPCError({
+			code: "UNAUTHORIZED",
+			message: error instanceof Error ? error.message : "Invalid workspace token",
+		});
+	}
 });

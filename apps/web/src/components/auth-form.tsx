@@ -12,7 +12,7 @@ export function AuthForm() {
           {/* GitHub Login */}
           <Button
             type="button"
-            onClick={() => authClient.signIn.social({ provider: "github", callbackURL: `${process.env.NEXT_PUBLIC_WERB_URL}/dashboard` })}
+            onClick={() => authClient.signIn.social({ provider: "github", callbackURL: `${process.env.NEXT_PUBLIC_WEB_URL}/dashboard` })}
             disabled={isPending}
             className="w-full max-w-xs bg-gray-900 hover:bg-gray-800 text-white border border-gray-300 hover:border-gray-400 shadow-sm hover:shadow-md transition-all duration-200 ease-in-out"
           >

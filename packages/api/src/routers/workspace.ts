@@ -1,12 +1,15 @@
+import { randomUUID } from "crypto";
 import z from "zod";
-import { protectedProcedure, publicProcedure, router } from "../index";
+import { protectedProcedure, publicProcedure, workspaceAuthProcedure, router } from "../index";
 import { db, eq, and, asc } from "@gitpad/db";
 import {
   agentWorkspaceConfig,
   workspaceEnvironmentVariables,
   workspace,
+  volume,
 } from "@gitpad/db/schema/workspace";
 import { agentType, image, cloudProvider, region } from "@gitpad/db/schema/cloud";
+import { user } from "@gitpad/db/schema/auth";
 import { TRPCError } from "@trpc/server";
 import { validateAgentConfig } from "@gitpad/schema";
 import {
@@ -14,10 +17,13 @@ import {
   hasRemainingQuota,
   updateLastActive,
   closeUsageSession,
+  createUsageSession,
   FREE_TIER_DAILY_MINUTES,
 } from "../utils/metering";
 import { getProviderByCloudProviderId } from "../providers";
 import { WORKSPACE_EVENTS } from "../events/workspace";
+import { githubAppService } from "../service/github";
+import { workspaceJWT } from "../service/workspace-jwt";
 
 export const workspaceRouter = router({
   // List all agent types
@@ -678,8 +684,8 @@ export const workspaceRouter = router({
     }
   }),
 
-  // Heartbeat endpoint for workspace agents (public - uses workspaceId for auth)
-  heartbeat: publicProcedure
+  // Heartbeat endpoint for workspace agents (uses JWT auth)
+  heartbeat: workspaceAuthProcedure
     .input(
       z.object({
         workspaceId: z.string().uuid(),
@@ -688,7 +694,17 @@ export const workspaceRouter = router({
         active: z.boolean().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const { workspaceAuth } = ctx;
+
+      // Verify workspace ID matches token
+      if (workspaceAuth.workspaceId !== input.workspaceId) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Token workspace mismatch",
+        });
+      }
+
       try {
         // Verify workspace exists
         const [existingWorkspace] = await db
@@ -700,6 +716,14 @@ export const workspaceRouter = router({
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Workspace not found",
+          });
+        }
+
+        // Verify ownership
+        if (existingWorkspace.userId !== workspaceAuth.userId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Workspace ownership mismatch",
           });
         }
 
@@ -728,6 +752,258 @@ export const workspaceRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to process heartbeat",
+          cause: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }),
+
+  // Create a new workspace
+  createWorkspace: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().optional(),
+        repo: z.string(),
+        agentTypeId: z.string(),
+        cloudProviderId: z.string(),
+        regionId: z.string(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
+      const workspaceId = randomUUID();
+
+      if (!userId) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "User not authenticated",
+        });
+      }
+
+      try {
+        // Check quota first
+        const hasQuota = await hasRemainingQuota(userId);
+        if (!hasQuota) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Daily free tier limit reached. Please try again tomorrow.",
+          });
+        }
+
+        // Get cloud provider info
+        const [cloudProviderRecord] = await db
+          .select()
+          .from(cloudProvider)
+          .where(eq(cloudProvider.id, input.cloudProviderId));
+
+        if (!cloudProviderRecord) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid cloud provider",
+          });
+        }
+
+        // Get region info
+        const [regionRecord] = await db
+          .select()
+          .from(region)
+          .where(
+            and(
+              eq(region.id, input.regionId),
+              eq(region.cloudProviderId, input.cloudProviderId)
+            )
+          );
+
+        if (!regionRecord) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid region for the selected cloud provider",
+          });
+        }
+
+        // Get image for this agent type (take the first one)
+        const [imageRecord] = await db
+          .select()
+          .from(image)
+          .where(eq(image.agentTypeId, input.agentTypeId));
+
+        if (!imageRecord) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "No image found for this agent type",
+          });
+        }
+
+        // Fetch user's agent configuration
+        const [agentConfig] = await db
+          .select()
+          .from(agentWorkspaceConfig)
+          .where(
+            and(
+              eq(agentWorkspaceConfig.userId, userId),
+              eq(agentWorkspaceConfig.agentTypeId, input.agentTypeId)
+            )
+          );
+
+        // Fetch user's workspace environment variables
+        const [userWorkspaceEnvironmentVariables] = await db
+          .select()
+          .from(workspaceEnvironmentVariables)
+          .where(
+            and(
+              eq(workspaceEnvironmentVariables.userId, userId),
+              eq(workspaceEnvironmentVariables.agentTypeId, input.agentTypeId)
+            )
+          );
+
+        // Get GitHub username from user.name (set during OAuth)
+        const [userRecord] = await db
+          .select()
+          .from(user)
+          .where(eq(user.id, userId));
+
+        const githubUsername = userRecord?.name;
+
+        // Get GitHub App installation and generate token
+        let githubAppToken: string | undefined;
+        let githubAppTokenExpiry: string | undefined;
+
+        const installation = await githubAppService.getUserInstallation(userId);
+        if (installation && !installation.suspended) {
+          try {
+            const tokenData = await githubAppService.getUserToServerToken(installation.installationId);
+            githubAppToken = tokenData.token;
+            githubAppTokenExpiry = tokenData.expiresAt;
+          } catch (error) {
+            console.error("Failed to generate GitHub App token:", error);
+            // Continue without token - user can still use workspace without git operations
+          }
+        }
+
+        // Parse repo URL to get owner/name
+        const repoInfo = input.repo ? githubAppService.parseRepoUrl(input.repo) : null;
+
+        // Generate unique subdomain
+        let subdomain: string;
+        let attempts = 0;
+        do {
+          if (attempts > 10) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to generate unique subdomain",
+            });
+          }
+          subdomain = `ws-${randomUUID().split('-')[0]}`;
+          attempts++;
+        } while (
+          await db
+            .select()
+            .from(workspace)
+            .where(eq(workspace.subdomain, subdomain))
+            .limit(1)
+            .then((rows) => rows.length > 0)
+        );
+
+        // Generate workspace-scoped JWT token (replaces shared INTERNAL_API_KEY)
+        const workspaceAuthToken = workspaceJWT.generateToken(
+          workspaceId,
+          userId,
+          ['git:*', 'git:fork', 'git:refresh'] // All git scopes
+        );
+
+        // API endpoint for workspace operations
+        const WORKSPACE_API_URL = process.env.WORKSPACE_API_URL || process.env.INTERNAL_API_URL || "https://api.gitterm.dev/trpc";
+
+        // Generate domain (assuming a base domain like gitterm.dev)
+        const baseDomain = process.env.BASE_DOMAIN || "gitterm.dev";
+        const domain = `${subdomain}.${baseDomain}`;
+
+        const DEFAULT_DOCKER_ENV_VARS = {
+          "REPO_URL": input.repo,
+          "OPENCODE_CONFIG_BASE64": agentConfig ? Buffer.from(JSON.stringify(agentConfig.config)).toString("base64") : undefined,
+          "USER_GITHUB_USERNAME": githubUsername,
+          "GITHUB_APP_TOKEN": githubAppToken,
+          "GITHUB_APP_TOKEN_EXPIRY": githubAppTokenExpiry,
+          "REPO_OWNER": repoInfo?.owner,
+          "REPO_NAME": repoInfo?.repo,
+          "WORKSPACE_ID": workspaceId,
+          "WORKSPACE_AUTH_TOKEN": workspaceAuthToken, // JWT instead of shared key
+          "WORKSPACE_API_URL": WORKSPACE_API_URL,
+          ...(userWorkspaceEnvironmentVariables ? userWorkspaceEnvironmentVariables.environmentVariables as any : {}),
+        };
+
+        // Get compute provider
+        const computeProvider = await getProviderByCloudProviderId(cloudProviderRecord.name);
+
+        // Create workspace via compute provider
+        const workspaceInfo = await computeProvider.createWorkspace({
+          workspaceId,
+          userId,
+          imageId: imageRecord.imageId,
+          subdomain,
+          repositoryUrl: input.repo,
+          regionIdentifier: regionRecord.externalRegionIdentifier,
+          environmentVariables: DEFAULT_DOCKER_ENV_VARS,
+        });
+
+        // Save workspace to database
+        const [newWorkspace] = await db
+          .insert(workspace)
+          .values({
+            id: workspaceId,
+            externalInstanceId: workspaceInfo.externalServiceId,
+            userId,
+            imageId: imageRecord.id,
+            cloudProviderId: input.cloudProviderId,
+            regionId: input.regionId,
+            repositoryUrl: input.repo,
+            domain,
+            subdomain,
+            backendUrl: workspaceInfo.backendUrl,
+            status: "pending",
+            startedAt: new Date(workspaceInfo.serviceCreatedAt),
+            lastActiveAt: new Date(workspaceInfo.serviceCreatedAt),
+            updatedAt: new Date(workspaceInfo.serviceCreatedAt),
+          })
+          .returning();
+
+        // Create volume record
+        const [newVolume] = await db.insert(volume).values({
+          workspaceId: workspaceId,
+          userId: userId,
+          cloudProviderId: input.cloudProviderId,
+          regionId: input.regionId,
+          externalVolumeId: workspaceInfo.externalVolumeId,
+          mountPath: "/workspace",
+          createdAt: new Date(workspaceInfo.volumeCreatedAt || new Date()),
+          updatedAt: new Date(workspaceInfo.volumeCreatedAt || new Date()),
+        }).returning();
+
+        // Create usage session for billing
+        await createUsageSession(workspaceId, userId);
+
+        // Emit status event
+        WORKSPACE_EVENTS.emitStatus({
+          workspaceId,
+          status: "pending",
+          updatedAt: new Date(workspaceInfo.serviceCreatedAt),
+          userId,
+          workspaceDomain: domain,
+        });
+
+        return {
+          success: true,
+          message: "Workspace created successfully",
+          workspace: newWorkspace,
+          volume: newVolume,
+        };
+      } catch (error) {
+        console.error("createWorkspace failed:", error);
+        // Throw a user-friendly error to the client
+        if (error instanceof TRPCError) throw error;
+
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create workspace. Please try again later.",
           cause: error instanceof Error ? error.message : "Unknown error",
         });
       }
@@ -951,6 +1227,71 @@ export const workspaceRouter = router({
           cause: error instanceof Error ? error.message : "Unknown error",
         });
       }
+    }),
+
+  // Delete a workspace
+  deleteWorkspace: protectedProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
+
+      const fetchedWorkspace = await db.query.workspace.findFirst({
+        where: and(eq(workspace.id, input.workspaceId), eq(workspace.userId, userId)),
+        with: {
+          volume: true,
+        }
+      });
+
+      if (!fetchedWorkspace) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Workspace not found" });
+      }
+
+      // Close usage session if workspace was running
+      if (fetchedWorkspace.status === "running" || fetchedWorkspace.status === "pending") {
+        await closeUsageSession(input.workspaceId, "manual");
+      }
+
+      // Get the cloud provider name
+      const [provider] = await db
+        .select()
+        .from(cloudProvider)
+        .where(eq(cloudProvider.id, fetchedWorkspace.cloudProviderId));
+
+      if (!provider) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Cloud provider not found",
+        });
+      }
+
+      // Get compute provider and terminate the workspace
+      const computeProvider = await getProviderByCloudProviderId(provider.name);
+      await computeProvider.terminateWorkspace(fetchedWorkspace.externalInstanceId, fetchedWorkspace.volume.externalVolumeId);
+
+      // Update workspace status
+      const [updatedWorkspace] = await db.update(workspace).set({
+        status: "terminated",
+        stoppedAt: new Date(),
+        terminatedAt: new Date(),
+        updatedAt: new Date()
+      }).where(eq(workspace.id, input.workspaceId)).returning();
+
+      // Delete volume record
+      await db.delete(volume).where(eq(volume.id, fetchedWorkspace.volume.id));
+
+      // Emit status event
+      WORKSPACE_EVENTS.emitStatus({
+        workspaceId: input.workspaceId,
+        status: "terminated",
+        updatedAt: new Date(),
+        userId,
+        workspaceDomain: fetchedWorkspace.domain,
+      });
+
+      return {
+        workspace: updatedWorkspace,
+        success: true,
+      };
     }),
 });
 
