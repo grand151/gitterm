@@ -39,6 +39,7 @@ export type AccessRule = {
 };
 
 export enum ActiveFeatureFlag {
+  AuditLogs = 'AUDIT_LOGS',
   BucketFileBrowser = 'BUCKET_FILE_BROWSER',
   ConversationalUi = 'CONVERSATIONAL_UI',
   HttpServiceMetrics = 'HTTP_SERVICE_METRICS',
@@ -188,6 +189,22 @@ export enum CertificateStatus {
   Unrecognized = 'UNRECOGNIZED'
 }
 
+export enum CertificateStatusDetailed {
+  CertificateStatusTypeDetailedCleaningUp = 'CERTIFICATE_STATUS_TYPE_DETAILED_CLEANING_UP',
+  CertificateStatusTypeDetailedComplete = 'CERTIFICATE_STATUS_TYPE_DETAILED_COMPLETE',
+  CertificateStatusTypeDetailedCreatingOrder = 'CERTIFICATE_STATUS_TYPE_DETAILED_CREATING_ORDER',
+  CertificateStatusTypeDetailedDownloadingCertificate = 'CERTIFICATE_STATUS_TYPE_DETAILED_DOWNLOADING_CERTIFICATE',
+  CertificateStatusTypeDetailedFailed = 'CERTIFICATE_STATUS_TYPE_DETAILED_FAILED',
+  CertificateStatusTypeDetailedFetchingAuthorizations = 'CERTIFICATE_STATUS_TYPE_DETAILED_FETCHING_AUTHORIZATIONS',
+  CertificateStatusTypeDetailedFinalizingOrder = 'CERTIFICATE_STATUS_TYPE_DETAILED_FINALIZING_ORDER',
+  CertificateStatusTypeDetailedGeneratingKeys = 'CERTIFICATE_STATUS_TYPE_DETAILED_GENERATING_KEYS',
+  CertificateStatusTypeDetailedInitiatingChallenges = 'CERTIFICATE_STATUS_TYPE_DETAILED_INITIATING_CHALLENGES',
+  CertificateStatusTypeDetailedPollingAuthorizations = 'CERTIFICATE_STATUS_TYPE_DETAILED_POLLING_AUTHORIZATIONS',
+  CertificateStatusTypeDetailedPresentingChallenges = 'CERTIFICATE_STATUS_TYPE_DETAILED_PRESENTING_CHALLENGES',
+  CertificateStatusTypeDetailedUnspecified = 'CERTIFICATE_STATUS_TYPE_DETAILED_UNSPECIFIED',
+  Unrecognized = 'UNRECOGNIZED'
+}
+
 export type CnameCheck = {
   __typename?: 'CnameCheck';
   link?: Maybe<Scalars['String']['output']>;
@@ -272,6 +289,7 @@ export type CustomDomainStatus = {
   __typename?: 'CustomDomainStatus';
   cdnProvider?: Maybe<CdnProvider>;
   certificateStatus: CertificateStatus;
+  certificateStatusDetailed?: Maybe<CertificateStatusDetailed>;
   certificates?: Maybe<Array<CertificatePublicData>>;
   dnsRecords: Array<DnsRecords>;
 };
@@ -625,6 +643,7 @@ export type DomainWithStatus = {
   __typename?: 'DomainWithStatus';
   cdnProvider?: Maybe<CdnProvider>;
   certificateStatus: CertificateStatus;
+  certificateStatusDetailed?: Maybe<CertificateStatusDetailed>;
   certificates?: Maybe<Array<CertificatePublicData>>;
   dnsRecords: Array<DnsRecords>;
   domain?: Maybe<Domain>;
@@ -5799,7 +5818,7 @@ export type ServiceCreateMutationVariables = Exact<{
 }>;
 
 
-export type ServiceCreateMutation = { __typename?: 'Mutation', serviceCreate: { __typename?: 'Service', id: string, name: string, icon?: string | null, createdAt: any, updatedAt: any, project: { __typename?: 'Project', baseEnvironmentId?: string | null } } };
+export type ServiceCreateMutation = { __typename?: 'Mutation', serviceCreate: { __typename?: 'Service', id: string, name: string, icon?: string | null, createdAt: any, updatedAt: any, project: { __typename?: 'Project', baseEnvironmentId?: string | null, environments: { __typename?: 'ProjectEnvironmentsConnection', edges: Array<{ __typename?: 'ProjectEnvironmentsConnectionEdge', node: { __typename?: 'Environment', deployments: { __typename?: 'EnvironmentDeploymentsConnection', edges: Array<{ __typename?: 'EnvironmentDeploymentsConnectionEdge', node: { __typename?: 'Deployment', id: string, status: DeploymentStatus } }> } } }> } } } };
 
 export type ServiceDeleteMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -5991,6 +6010,20 @@ export const ServiceCreateDocument = `
     updatedAt
     project {
       baseEnvironmentId
+      environments {
+        edges {
+          node {
+            deployments(first: 1) {
+              edges {
+                node {
+                  id
+                  status
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
