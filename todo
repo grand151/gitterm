@@ -1,5 +1,11 @@
 - Handling and Noticing GIT operations (user pushing to their own repo -> changing remote)
     - Show this on a sort of Header so they can decide to push from there
+    - Implement Functionality
+        - Understand Github Flow, also logging in on the instances
+        - FORK
+        - Commiting
+        - Pushing
+
 - Scheduling deletion of service if not being used.
-- Attaching Persistent Volumes
+
 https://github.com/coder/ghostty-web

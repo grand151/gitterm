@@ -145,7 +145,8 @@ export const internalRouter = router({
       const computeProvider = await getProviderByCloudProviderId(provider.name);
       await computeProvider.stopWorkspace(
         ws.externalInstanceId,
-        workspaceRegion.externalRegionIdentifier
+        workspaceRegion.externalRegionIdentifier,
+        ws.externalRunningDeploymentId || undefined
       );
 
       // Close usage session

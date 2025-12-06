@@ -1,12 +1,12 @@
 import z from "zod";
 import { protectedProcedure, router } from "../../index";
-import { railway } from "../../service/railway/railway";
 import { db, eq, and } from "@gitpad/db";
-import { workspace, agentWorkspaceConfig, workspaceEnvironmentVariables } from "@gitpad/db/schema/workspace";
+import { workspace, agentWorkspaceConfig, workspaceEnvironmentVariables, volume } from "@gitpad/db/schema/workspace";
 import { image, region } from "@gitpad/db/schema/cloud";
 import { TRPCError } from "@trpc/server";
 import { randomUUID } from "crypto";
 import { hasRemainingQuota, createUsageSession, closeUsageSession } from "../../utils/metering";
+import { RailwayProvider } from "../../providers/railway";
 
 const PROJECT_ID = process.env.RAILWAY_PROJECT_ID;
 const ENVIRONMENT_ID = process.env.RAILWAY_ENVIRONMENT_ID;
@@ -18,9 +18,12 @@ if (!PROJECT_ID) {
 if (!ENVIRONMENT_ID) {
   throw new Error("RAILWAY_ENVIRONMENT_ID is not set");
 }
+
+const railwayProvider = new RailwayProvider();
+
 export const railwayRouter = router({
   // Create a new service from a GitHub repo
-  createService: protectedProcedure
+  createWorkspace: protectedProcedure
     .input(
       z.object({
         name: z.string().optional(),
@@ -90,59 +93,51 @@ export const railwayRouter = router({
           ...(userWorkspaceEnvironmentVariables ? userWorkspaceEnvironmentVariables.environmentVariables as any : {}),
         }
 
-        const { serviceCreate } = await railway.ServiceCreate({
-          input: {
-            projectId: PROJECT_ID,
-            name: subdomain, // Use subdomain as service name for predictable internal DNS
-            source: {
-              image: imageRecord.imageId,
-            },
-            variables: DEFAULT_DOCKER_ENV_VARS
-          },
-        }).catch((error) => {
-          console.error("Railway API Error:", error);
-          throw new Error(`Railway API Error: ${error.message}`);
-        });
 
-        await railway.UpdateRegions({
-          environmentId: ENVIRONMENT_ID,
-          serviceId: serviceCreate.id,
-          multiRegionConfig: {
-            [preferredRegion.externalRegionIdentifier]: {
-              "numReplicas": 1,
-            }
-          }
-        }).catch((error) => {
-          console.error("Railway API Error:", error);
-          throw new Error(`Railway API Error: ${error.message}`);
+        const workspaceInfo = await railwayProvider.createWorkspace({
+          workspaceId: workspaceId,
+          userId: userId,
+          imageId: imageRecord.id,
+          subdomain: subdomain,
+          repositoryUrl: input.repo,
+          regionIdentifier: preferredRegion.externalRegionIdentifier,
+          environmentVariables: DEFAULT_DOCKER_ENV_VARS,
         });
-
-        // Construct internal backend URL (assuming Railway Private Networking)
-        // Service name is used as the hostname. Port 7681 is ttyd default.
-        const backendUrl = `http://${subdomain}.railway.internal:7681`;
 
         const [newWorkspace] = await db.insert(workspace).values({
           id: workspaceId,
           userId,
-          externalInstanceId: serviceCreate.id,
+          externalInstanceId: workspaceInfo.externalServiceId,
           imageId: imageRecord.id,
           cloudProviderId: input.cloudProviderId,
           regionId: preferredRegion.id,
           repositoryUrl: input.repo,
           subdomain: subdomain,
-          backendUrl: backendUrl,
+          backendUrl: workspaceInfo.backendUrl,
           domain: `${subdomain}.gitterm.dev`, // This domain will be handled by the wildcard proxy
           status: "pending",
-          startedAt: new Date(serviceCreate.createdAt),
-          lastActiveAt: new Date(serviceCreate.createdAt),
-          updatedAt: new Date(serviceCreate.createdAt),
+          startedAt: new Date(workspaceInfo.serviceCreatedAt),
+          lastActiveAt: new Date(workspaceInfo.serviceCreatedAt),
+          updatedAt: new Date(workspaceInfo.serviceCreatedAt),
+        }).returning();
+
+        const [newVolume] = await db.insert(volume).values({
+          workspaceId: workspaceId,
+          userId: userId,
+          cloudProviderId: input.cloudProviderId,
+          regionId: preferredRegion.id,
+          externalVolumeId: workspaceInfo.externalVolumeId,
+          mountPath: "/workspace",
+          createdAt: new Date(workspaceInfo.volumeCreatedAt || new Date()),
+          updatedAt: new Date(workspaceInfo.volumeCreatedAt || new Date()),
         }).returning();
 
         // Create usage session for billing
         await createUsageSession(workspaceId, userId);
 
         return {
-          workspace: newWorkspace
+          workspace: newWorkspace,
+          volume: newVolume,
         };
       } catch (error) {
         console.error("createService failed:", error);
@@ -157,13 +152,49 @@ export const railwayRouter = router({
       }
     }),
 
+    stopWorkspace: protectedProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
+      
+      const fetchedWorkspace = await db.query.workspace.findFirst({
+        where: and(eq(workspace.id, input.workspaceId), eq(workspace.userId, userId)),
+        with: {
+          volume: true,
+          region: true,
+        }
+      })
+      
+      
+    if (!fetchedWorkspace) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Workspace not found" });
+    }
+
+    if (!fetchedWorkspace.externalRunningDeploymentId) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Workspace is not running" });
+    }
+
+    await railwayProvider.stopWorkspace(fetchedWorkspace.externalInstanceId, fetchedWorkspace.region.externalRegionIdentifier, fetchedWorkspace.externalRunningDeploymentId);
+
+    const [updatedWorkspace] = await db.update(workspace).set({ status: "stopped", stoppedAt: new Date(), updatedAt: new Date() }).where(eq(workspace.id, input.workspaceId)).returning();
+
+    return {
+      workspace: updatedWorkspace,
+    };
+  }),
+
   // Delete a service
-  deleteService: protectedProcedure
+  deleteWorkspace: protectedProcedure
     .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ input, ctx }) => {
       const userId = ctx.session.user.id;
 
-      const [fetchedWorkspace] = await db.select().from(workspace).where(and(eq(workspace.id, input.workspaceId), eq(workspace.userId, userId)));
+      const fetchedWorkspace = await db.query.workspace.findFirst({
+        where: and(eq(workspace.id, input.workspaceId), eq(workspace.userId, userId)),
+        with: {
+          volume: true,
+        }
+      })
 
       if (!fetchedWorkspace) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Workspace not found" });
@@ -173,93 +204,46 @@ export const railwayRouter = router({
       if (fetchedWorkspace.status === "running" || fetchedWorkspace.status === "pending") {
         await closeUsageSession(input.workspaceId, "manual");
       }
-      
-      const { serviceDelete } = await railway.ServiceDelete({ id: fetchedWorkspace.externalInstanceId });
 
-      await db.update(workspace).set({ status: "terminated", stoppedAt: new Date(), updatedAt: new Date() }).where(eq(workspace.id, input.workspaceId));
+
+      await railwayProvider.terminateWorkspace(fetchedWorkspace.externalInstanceId, fetchedWorkspace.volume.externalVolumeId);
+
+     const [updatedWorkspace] = await db.update(workspace).set({ status: "terminated", stoppedAt: new Date(), terminatedAt: new Date(), updatedAt: new Date() }).where(eq(workspace.id, input.workspaceId)).returning();
+      await db.delete(volume).where(eq(volume.id, fetchedWorkspace.volume.id));
       return {
-        workspace: fetchedWorkspace,
-        serviceDelete
+        workspace: updatedWorkspace,
+        success: true,
       };
     }),
 
-  // Update a service
-  updateService: protectedProcedure
-    .input(
-      z.object({
-        serviceId: z.string(),
-        name: z.string().optional(),
-        icon: z.string().optional(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const result = await railway.ServiceUpdate({
-        id: input.serviceId,
-        input: {
-          name: input.name,
-          icon: input.icon,
-        },
-      });
-      return result.serviceUpdate;
-    }),
-
   // Redeploy a deployment
-  redeployDeployment: protectedProcedure
-    .input(z.object({ deploymentId: z.string() }))
-    .mutation(async ({ input }) => {
-      const result = await railway.DeploymentRedeploy({ id: input.deploymentId });
-      return result.deploymentRedeploy;
-    }),
+  restartWorkspace: protectedProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const userId = ctx.session.user.id;
 
-  // Get current user info
-  me: protectedProcedure.query(async () => {
-    const result = await railway.Me();
-    return result.me;
-  }),
-
-  // Get a single project with its services
-  getProject: protectedProcedure
-    .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
-      const result = await railway.Project({ id: input.projectId });
-      return result.project;
-    }),
-
-  // List all projects
-  listProjects: protectedProcedure.query(async () => {
-    const result = await railway.Projects();
-    return result.projects.edges.map((e) => e.node);
-  }),
-
-  // Get a single service
-  getService: protectedProcedure
-    .input(z.object({ serviceId: z.string() }))
-    .query(async ({ input }) => {
-      const result = await railway.Service({ id: input.serviceId });
-      return result.service;
-    }),
-
-  // List environments for a project
-  listEnvironments: protectedProcedure
-    .input(z.object({ projectId: z.string() }))
-    .query(async ({ input }) => {
-      const result = await railway.Environments({ projectId: input.projectId });
-      return result.environments.edges.map((e) => e.node);
-    }),
-
-  // List deployments for a service
-  listDeployments: protectedProcedure
-    .input(
-      z.object({
-        serviceId: z.string(),
-        limit: z.number().optional().default(10),
+      const fetchedWorkspace = await db.query.workspace.findFirst({
+        where: and(eq(workspace.id, input.workspaceId), eq(workspace.userId, userId)),
+        with: {
+          volume: true,
+          region: true,
+        }
       })
-    )
-    .query(async ({ input }) => {
-      const result = await railway.Deployments({
-        input: { serviceId: input.serviceId },
-        first: input.limit,
-      });
-      return result.deployments.edges.map((e) => e.node);
+
+      if (!fetchedWorkspace) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Workspace not found" });
+      }
+
+      if (!fetchedWorkspace.externalRunningDeploymentId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Workspace is not running" });
+      }
+
+      await railwayProvider.restartWorkspace(fetchedWorkspace.externalInstanceId, fetchedWorkspace.region.externalRegionIdentifier, fetchedWorkspace.externalRunningDeploymentId);
+
+      const [updatedWorkspace] = await db.update(workspace).set({ status: "pending", stoppedAt: null, updatedAt: new Date() }).where(eq(workspace.id, input.workspaceId)).returning();
+
+      return {
+        workspace: updatedWorkspace,
+      };
     }),
 });

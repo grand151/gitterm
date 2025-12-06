@@ -5,14 +5,17 @@ import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 import { cn } from "@/lib/utils";
 import type { Route } from "next";
+import { authClient } from "@/lib/auth-client";
 
 export function Header() {
 	const pathname = usePathname();
+
+	const { data: session } = authClient.useSession();
 	
 	const links = [
-		{ to: "/", label: "Home" },
-		{ to: "/dashboard", label: "Dashboard" },
-		{ to: "/dashboard/profile", label: "Usage" },
+		{ to: "/", label: "Home", signedIn: false },
+		{ to: "/dashboard", label: "Dashboard", signedIn: true },
+		{ to: "/dashboard/profile", label: "Usage", signedIn: true },
 	] as const;
 
 	return (
@@ -23,7 +26,10 @@ export function Header() {
 						GitTerm
 					</Link>
 					<nav className="flex gap-6 text-sm font-medium">
-						{links.slice(1).map(({ to, label }) => {
+						{links.slice(1).map(({ to, label, signedIn }) => {
+							if (signedIn && !session) {
+								return null;
+							}
 							const isActive = pathname === to;
 							return (
 								<Link 
