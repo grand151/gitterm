@@ -1,9 +1,9 @@
 import z from "zod";
-import { protectedProcedure, publicProcedure, router } from "../../index";
+import { protectedProcedure, router } from "../../index";
 import { githubAppService } from "../../service/github";
 import { TRPCError } from "@trpc/server";
-import { db, eq } from "@gitpad/db";
-import { workspaceGitConfig, githubAppInstallation } from "@gitpad/db/schema/integrations";
+import { db, eq, and } from "@gitpad/db";
+import { workspaceGitConfig, gitIntegration } from "@gitpad/db/schema/integrations";
 
 export const githubRouter = router({
   /**
@@ -13,7 +13,16 @@ export const githubRouter = router({
     const userId = ctx.session.user.id;
 
     try {
-      const installation = await githubAppService.getUserInstallation(userId);
+      const [gitIntegrationRecord] = await db.select().from(gitIntegration).where(and(eq(gitIntegration.userId, userId), eq(gitIntegration.provider, "github")));
+      
+      if (!gitIntegrationRecord) {
+        return {
+          connected: false,
+          installation: null,
+        };
+      }
+
+      const installation = await githubAppService.getUserInstallation(userId, gitIntegrationRecord.providerInstallationId);
 
       if (!installation) {
         return {
@@ -112,7 +121,16 @@ export const githubRouter = router({
     const userId = ctx.session.user.id;
 
     try {
-      const installation = await githubAppService.getUserInstallation(userId);
+      const [gitIntegrationRecord] = await db.select().from(gitIntegration).where(and(eq(gitIntegration.userId, userId), eq(gitIntegration.provider, "github")));
+      
+      if (!gitIntegrationRecord) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "GitHub App not connected",
+        });
+      }
+
+      const installation = await githubAppService.getUserInstallation(userId, gitIntegrationRecord.providerInstallationId);
 
       if (!installation) {
         throw new TRPCError({

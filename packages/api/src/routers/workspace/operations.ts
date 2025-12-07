@@ -2,7 +2,7 @@ import z from "zod";
 import { workspaceAuthProcedure, router } from "../../index";
 import { db, eq, and, gt } from "@gitpad/db";
 import { workspace } from "@gitpad/db/schema/workspace";
-import { workspaceGitConfig } from "@gitpad/db/schema/integrations";
+import { gitIntegration, workspaceGitConfig } from "@gitpad/db/schema/integrations";
 import { TRPCError } from "@trpc/server";
 import { githubAppService } from "../../service/github";
 import { workspaceJWT } from "../../service/workspace-jwt";
@@ -27,7 +27,7 @@ export const workspaceOperationsRouter = router({
   forkRepository: workspaceAuthProcedure
     .input(
       z.object({
-        workspaceId: z.string().uuid(),
+        workspaceId: z.string(),
         owner: z.string(),
         repo: z.string(),
       })
@@ -82,8 +82,17 @@ export const workspaceOperationsRouter = router({
       try {
         const userId = ws.userId;
 
-        // Get GitHub App installation
-        const installation = await githubAppService.getUserInstallation(userId);
+        // Get GitHub App installation using the specific installation ID
+        const [gitIntegrationRecord] = await db.select().from(gitIntegration).where(and(eq(gitIntegration.userId, userId), eq(gitIntegration.provider, "github")));
+
+        if (!gitIntegrationRecord) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "GitHub App not connected",
+          });
+        }
+
+        const installation = await githubAppService.getUserInstallation(userId, gitIntegrationRecord.providerInstallationId);
 
         if (!installation) {
           throw new TRPCError({
@@ -255,8 +264,18 @@ export const workspaceOperationsRouter = router({
       try {
         const userId = ws.userId;
 
+        const [gitIntegrationRecord] = await db.select().from(gitIntegration).where(and(eq(gitIntegration.userId, userId), eq(gitIntegration.provider, "github")));
+
+        // we only support GitHub for now
+        if (!gitIntegrationRecord) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "GitHub App not connected",
+          });
+        }
+
         // Get GitHub App installation
-        const installation = await githubAppService.getUserInstallation(userId);
+        const installation = await githubAppService.getUserInstallation(userId, gitIntegrationRecord.providerInstallationId);
 
         if (!installation) {
           throw new TRPCError({
