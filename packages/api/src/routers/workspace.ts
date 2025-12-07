@@ -24,7 +24,7 @@ import { getProviderByCloudProviderId, type PersistentWorkspaceInfo, type Worksp
 import { WORKSPACE_EVENTS } from "../events/workspace";
 import { githubAppService } from "../service/github";
 import { workspaceJWT } from "../service/workspace-jwt";
-import { githubAppInstallation } from "@gitpad/db/schema/integrations";
+import { githubAppInstallation, gitIntegration } from "@gitpad/db/schema/integrations";
 
 export const workspaceRouter = router({
 
@@ -38,7 +38,7 @@ export const workspaceRouter = router({
       });
     }
 
-    const installations = await db.select().from(githubAppInstallation).where(eq(githubAppInstallation.userId, userId));
+    const installations = await db.select().from(gitIntegration).where(eq(gitIntegration.userId, userId)).innerJoin(githubAppInstallation, eq(gitIntegration.providerInstallationId, githubAppInstallation.id));
 
     return {
       success: true,
@@ -894,7 +894,24 @@ export const workspaceRouter = router({
         let githubAppTokenExpiry: string | undefined;
 
         if (input.gitInstallationId) {
-        const installation = await githubAppService.getUserInstallation(userId, input.gitInstallationId);
+          const [gitIntegrationRecord] = await db.select().from(gitIntegration).where(and(eq(gitIntegration.id, input.gitInstallationId), eq(gitIntegration.userId, userId)));
+
+          if (!gitIntegrationRecord) {
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Git integration not found",
+            });
+          }
+
+          if (gitIntegrationRecord.provider !== "github") {
+            // TODO: Support other git providers
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Invalid git provider",
+            });
+          }
+
+        const installation = await githubAppService.getUserInstallation(userId, gitIntegrationRecord.providerInstallationId);
         if (installation && !installation.suspended) {
           try {
               const tokenData = await githubAppService.getUserToServerToken(installation.installationId);
@@ -967,7 +984,7 @@ export const workspaceRouter = router({
           ? await computeProvider.createPersistentWorkspace({
               workspaceId,
               userId,
-              imageId: imageRecord.id,
+              imageId: imageRecord.imageId,
               subdomain,
               repositoryUrl: input.repo,
               regionIdentifier: regionRecord.externalRegionIdentifier,

@@ -53,7 +53,7 @@ export function CreateInstanceDialog() {
   const [selectedCloudProviderId, setSelectedCloudProviderId] = useState<string>("");
   const [selectedRegion, setSelectedRegion] = useState<string | undefined>(undefined);
   const [selectedGitInstallationId, setSelectedGitInstallationId] = useState<string | undefined>(undefined);
-  const [selectedPersistent, setSelectedPersistent] = useState<boolean>(false);
+  const [selectedPersistent, setSelectedPersistent] = useState<boolean>(true);
 
   // Fetch dynamic data
   const { data: agentTypesData } = useQuery(trpc.workspace.listAgentTypes.queryOptions());
@@ -152,6 +152,7 @@ export function CreateInstanceDialog() {
       agentTypeId: selectedAgentTypeId,
       cloudProviderId: selectedCloudProviderId,
       regionId: selectedRegion,
+      gitInstallationId: selectedGitInstallationId,
       persistent: selectedPersistent,
     });
   };
@@ -286,7 +287,7 @@ export function CreateInstanceDialog() {
               <SelectContent>
                 {installationsData?.installations && installationsData.installations.length > 0 && (
                   installationsData?.installations?.map((installation) => (
-                    <SelectItem key={installation.id} value={installation.id}>
+                    <SelectItem key={installation.git_integration.id} value={installation.git_integration.id}>
                       <div className="flex items-center">
                         <Image 
                             src={"/github.svg"} 
@@ -295,7 +296,7 @@ export function CreateInstanceDialog() {
                             height={16} 
                             className="mr-2 h-4 w-4" 
                           />
-                          {installation.accountLogin}
+                          {installation.git_integration.providerAccountLogin}
                         </div>
                   </SelectItem>
                 ))
@@ -310,7 +311,7 @@ export function CreateInstanceDialog() {
               id="persistent"
               checked={selectedPersistent}
               defaultChecked
-              onCheckedChange={(checked) => setSelectedPersistent(checked.valueOf() as boolean)}
+              onCheckedChange={(checked) => setSelectedPersistent(checked === true)}
             />
             <div className="grid gap-1.5 leading-none">
               <Label
