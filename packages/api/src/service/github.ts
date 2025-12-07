@@ -195,13 +195,15 @@ export class GitHubAppService {
 
   /**
    * Get GitHub App installation for a user
+   * @param userId - The user ID
+   * @param installationId - The GitHub installation ID (text), not the database UUID
    */
-  async getUserInstallation(userId: string, githubAppInstallationId: string): Promise<typeof githubAppInstallation.$inferSelect | null> {
+  async getUserInstallation(userId: string, installationId: string): Promise<typeof githubAppInstallation.$inferSelect | null> {
     try {
       const [installation] = await db
         .select()
         .from(githubAppInstallation)
-        .where(and(eq(githubAppInstallation.userId, userId), eq(githubAppInstallation.id, githubAppInstallationId)))
+        .where(and(eq(githubAppInstallation.userId, userId), eq(githubAppInstallation.installationId, installationId)))
         .limit(1);
 
       return installation || null;
