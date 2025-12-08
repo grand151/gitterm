@@ -1,6 +1,7 @@
 import { internalClient } from "@gitpad/api/client/internal";
 import "dotenv/config";
 import * as http from "http";
+import * as https from "https";
 import { WebSocket, WebSocketServer } from "ws";
 import httpProxy from "http-proxy";
 import * as dns from "dns";
@@ -110,13 +111,7 @@ function getOrCreateProxy(workspaceId: string): httpProxy {
       ws: false,
       timeout: 60000, // 60 second timeout for large assets
       proxyTimeout: 60000,
-      // Force IPv6 for Railway internal network
-      agent: new http.Agent({
-        family: 6,
-        keepAlive: true,
-        keepAliveMsecs: 1000,
-        maxSockets: 50,
-      }),
+      // Don't set agent here - we'll handle it per request
     });
     
     proxyCache.set(workspaceId, proxy);
@@ -196,13 +191,17 @@ const server = http.createServer(async (req: any, res: any) => {
       return;
     }
 
-    console.log(`[${ws.id}] ${req.method} ${req.url} -> ${ws.backendUrl}${req.url}`);
+    console.log(`[${ws.id}] ${req.method} ${req.url} -> ${ws.backendUrl}${req.url} (public: ${isPublicRequest})`);
 
     // Get or create proxy for this workspace
     const proxy = getOrCreateProxy(ws.id);
 
+    // Remove all old listeners to prevent memory leaks
+    proxy.removeAllListeners("proxyReq");
+    proxy.removeAllListeners("error");
+    proxy.removeAllListeners("proxyRes");
+
     // Add auth and forwarding headers to proxied requests
-    proxy.off("proxyReq"); // Remove old listeners
     proxy.on("proxyReq", (proxyReq: any, req: any) => {
       if (!ws.serverOnly && userId) {
         proxyReq.setHeader("X-Auth-User", userId);
@@ -232,13 +231,13 @@ const server = http.createServer(async (req: any, res: any) => {
     });
 
     // Handle proxy errors with detailed logging
-    proxy.off("error"); // Remove old listeners
     proxy.on("error", (error: any, req: any, res: any) => {
-      console.error(`[${ws.id}] Proxy error for ${req.url}:`, {
+      console.error(`[${ws.id}] ✗ Proxy error for ${req.method} ${req.url}:`, {
         message: error.message,
         code: error.code,
         errno: error.errno,
         syscall: error.syscall,
+        backend: ws.backendUrl
       });
       
       if (!res.headersSent) {
@@ -265,10 +264,34 @@ const server = http.createServer(async (req: any, res: any) => {
     });
 
     // Log successful proxy responses
-    proxy.off("proxyRes"); // Remove old listeners
-    proxy.on("proxyRes", (proxyRes: any, req: any) => {
-      console.log(`[${ws.id}] ← ${proxyRes.statusCode} ${req.url}`);
+    proxy.on("proxyRes", (proxyRes: any, req: any, res: any) => {
+      console.log(`[${ws.id}] ✓ ${proxyRes.statusCode} ${req.method} ${req.url} (${proxyRes.headers['content-length'] || 'chunked'})`);
+      
+      // Handle response errors (connection drops during transfer)
+      proxyRes.on('error', (err: any) => {
+        console.error(`[${ws.id}] Response stream error for ${req.url}:`, err.message);
+        if (!res.headersSent) {
+          res.writeHead(502, { "Content-Type": "text/plain" });
+          res.end("Bad Gateway - Response stream interrupted");
+        } else {
+          res.end();
+        }
+      });
+      
+      // Log when response completes
+      proxyRes.on('end', () => {
+        console.log(`[${ws.id}] ✓ Complete: ${req.url}`);
+      });
     });
+
+    // Handle response errors from client side
+    res.on('error', (err: any) => {
+      console.error(`[${ws.id}] Client response error:`, err.message);
+    });
+
+    // Test backend connectivity before proxying
+    const backendUrl = new URL(ws.backendUrl);
+    console.log(`[${ws.id}] Target: ${backendUrl.protocol}//${backendUrl.host}`);
 
     // Forward HTTP request to backend
     proxy.web(req, res, { target: ws.backendUrl });
