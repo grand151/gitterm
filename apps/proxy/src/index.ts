@@ -265,11 +265,32 @@ const server = http.createServer(async (req: any, res: any) => {
 
     // Log successful proxy responses
     proxy.on("proxyRes", (proxyRes: any, req: any, res: any) => {
-      console.log(`[${ws.id}] ✓ ${proxyRes.statusCode} ${req.method} ${req.url} (${proxyRes.headers['content-length'] || 'chunked'})`);
+      const contentLength = proxyRes.headers['content-length'];
+      const transferEncoding = proxyRes.headers['transfer-encoding'];
+      const isChunked = transferEncoding === 'chunked';
+      
+      console.log(`[${ws.id}] ✓ ${proxyRes.statusCode} ${req.method} ${req.url} (${contentLength || 'chunked'})`);
+      
+      // For chunked responses, ensure we don't timeout
+      if (isChunked) {
+        // Increase socket timeout for chunked transfers
+        if (req.socket) {
+          req.socket.setTimeout(120000); // 2 minutes
+        }
+        if (res.socket) {
+          res.socket.setTimeout(120000);
+        }
+      }
+      
+      // Track bytes transferred for debugging
+      let bytesReceived = 0;
+      proxyRes.on('data', (chunk: Buffer) => {
+        bytesReceived += chunk.length;
+      });
       
       // Handle response errors (connection drops during transfer)
       proxyRes.on('error', (err: any) => {
-        console.error(`[${ws.id}] Response stream error for ${req.url}:`, err.message);
+        console.error(`[${ws.id}] Response stream error for ${req.url}:`, err.message, `(${bytesReceived} bytes received)`);
         if (!res.headersSent) {
           res.writeHead(502, { "Content-Type": "text/plain" });
           res.end("Bad Gateway - Response stream interrupted");
@@ -280,21 +301,67 @@ const server = http.createServer(async (req: any, res: any) => {
       
       // Log when response completes
       proxyRes.on('end', () => {
-        console.log(`[${ws.id}] ✓ Complete: ${req.url}`);
+        console.log(`[${ws.id}] ✓ Complete: ${req.url} (${bytesReceived} bytes)`);
+      });
+      
+      // Handle premature close
+      proxyRes.on('close', () => {
+        if (bytesReceived === 0 || (contentLength && bytesReceived < parseInt(contentLength))) {
+          console.warn(`[${ws.id}] ⚠ Premature close: ${req.url} (${bytesReceived}/${contentLength || '?'} bytes)`);
+        }
       });
     });
 
     // Handle response errors from client side
     res.on('error', (err: any) => {
-      console.error(`[${ws.id}] Client response error:`, err.message);
+      console.error(`[${ws.id}] Client response error for ${req.url}:`, err.message);
     });
+    
+    // Handle client closing connection early
+    res.on('close', () => {
+      if (!res.finished) {
+        console.warn(`[${ws.id}] Client closed connection early for ${req.url}`);
+      }
+    });
+    
+    // Increase request socket timeout
+    if (req.socket) {
+      req.socket.setTimeout(120000); // 2 minutes
+      req.socket.setKeepAlive(true, 1000);
+    }
+    
+    // Increase response socket timeout
+    if (res.socket) {
+      res.socket.setTimeout(120000);
+      res.socket.setKeepAlive(true, 1000);
+    }
 
     // Test backend connectivity before proxying
     const backendUrl = new URL(ws.backendUrl);
     console.log(`[${ws.id}] Target: ${backendUrl.protocol}//${backendUrl.host}`);
+    
+    // Create appropriate agent based on protocol with IPv6 support
+    const isHttps = backendUrl.protocol === 'https:';
+    const agent = isHttps 
+      ? new https.Agent({
+          family: 6,
+          keepAlive: true,
+          keepAliveMsecs: 1000,
+          maxSockets: 50,
+          rejectUnauthorized: false,
+        })
+      : new http.Agent({
+          family: 6,
+          keepAlive: true,
+          keepAliveMsecs: 1000,
+          maxSockets: 50,
+        });
 
     // Forward HTTP request to backend
-    proxy.web(req, res, { target: ws.backendUrl });
+    proxy.web(req, res, { 
+      target: ws.backendUrl,
+      agent: agent 
+    });
     
   } catch (error) {
     console.error("Request handler error:", error);
