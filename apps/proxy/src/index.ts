@@ -193,11 +193,17 @@ const server = http.createServer(async (req: any, res: any) => {
 
     console.log(`[${ws.id}] ${req.method} ${req.url} -> ${ws.backendUrl}${req.url} (public: ${isPublicRequest})`);
 
+    // Check if this is a streaming endpoint (SSE, webhooks, etc.)
+    const isStreamingEndpoint = req.url.includes('/event') || 
+                                req.url.includes('/stream') || 
+                                req.headers.accept?.includes('text/event-stream');
+
     // Check if this is a static asset that might have chunked encoding issues with Cloudflare
     const staticAssetExtensions = ['.js', '.css', '.webmanifest', '.ico', '.svg', '.woff2', '.woff', '.ttf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
     const isStaticAsset = staticAssetExtensions.some(ext => req.url.toLowerCase().endsWith(ext));
     
-    if (isStaticAsset) {
+    // Only use manual buffering for static assets, NOT for streaming endpoints
+    if (isStaticAsset && !isStreamingEndpoint) {
       console.log(`[${ws.id}] Using manual proxy for static asset: ${req.url}`);
       
       // Manual proxy for large assets to avoid http-proxy chunked encoding issues
@@ -231,16 +237,6 @@ const server = http.createServer(async (req: any, res: any) => {
         proxyRes.on('data', (chunk: Buffer) => {
           chunks.push(chunk);
           totalLength += chunk.length;
-          
-          // Safety: If file is unexpectedly huge (>10MB), something is wrong
-          if (totalLength > 10 * 1024 * 1024) {
-            console.error(`[${ws.id}] Asset too large (${totalLength} bytes), aborting buffer: ${req.url}`);
-            proxyRes.destroy();
-            if (!res.headersSent) {
-              res.writeHead(502);
-              res.end('Asset too large');
-            }
-          }
         });
         
         proxyRes.on('end', () => {
