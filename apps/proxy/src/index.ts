@@ -193,6 +193,67 @@ const server = http.createServer(async (req: any, res: any) => {
 
     console.log(`[${ws.id}] ${req.method} ${req.url} -> ${ws.backendUrl}${req.url} (public: ${isPublicRequest})`);
 
+    // Check if this is a large static asset that might have chunked encoding issues
+    const isLargeAsset = req.url.includes('/assets/') && (req.url.endsWith('.js') || req.url.endsWith('.css'));
+    
+    if (isLargeAsset) {
+      console.log(`[${ws.id}] Using manual proxy for large asset: ${req.url}`);
+      
+      // Manual proxy for large assets to avoid http-proxy chunked encoding issues
+      const backendUrl = new URL(ws.backendUrl);
+      const targetUrl = `${ws.backendUrl}${req.url}`;
+      
+      const options: http.RequestOptions = {
+        hostname: backendUrl.hostname,
+        port: backendUrl.port || 80,
+        path: req.url,
+        method: req.method,
+        headers: {
+          ...req.headers,
+          host: backendUrl.host,
+          'x-forwarded-for': req.socket.remoteAddress || '',
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': host,
+        },
+        family: 6, // IPv6 for Railway
+      };
+      
+      const proxyReq = http.request(options, (proxyRes) => {
+        console.log(`[${ws.id}] Manual proxy response: ${proxyRes.statusCode} for ${req.url}`);
+        
+        // Forward status and headers
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        
+        // Pipe the response
+        proxyRes.pipe(res);
+        
+        proxyRes.on('end', () => {
+          console.log(`[${ws.id}] Manual proxy complete: ${req.url}`);
+        });
+        
+        proxyRes.on('error', (err) => {
+          console.error(`[${ws.id}] Manual proxy error:`, err.message);
+          if (!res.headersSent) {
+            res.writeHead(502);
+            res.end('Bad Gateway');
+          }
+        });
+      });
+      
+      proxyReq.on('error', (err) => {
+        console.error(`[${ws.id}] Manual proxy request error:`, err.message);
+        if (!res.headersSent) {
+          res.writeHead(502);
+          res.end('Bad Gateway');
+        }
+      });
+      
+      // Forward request body if any
+      req.pipe(proxyReq);
+      
+      return; // Skip http-proxy for this request
+    }
+
     // Get or create proxy for this workspace
     const proxy = getOrCreateProxy(ws.id);
 
