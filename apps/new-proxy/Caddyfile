@@ -13,9 +13,8 @@
 *.gitterm.dev {
 	# Health check endpoint
 	handle /health {
-		respond `{"status":"UP"}` 200 {
-			header Content-Type application/json
-		}
+		header Content-Type application/json
+		respond `{"status":"UP"}` 200
 	}
 
 	# Main proxy handler
@@ -97,30 +96,16 @@
 		@404 expression {err.status_code} == 404
 		@500 expression {err.status_code} >= 500
 
-		respond @400 `{"error": "Bad Request"}` 400 {
-			header Content-Type application/json
-		}
+		header Content-Type application/json
 		
-		respond @401 `{"error": "Unauthorized"}` 401 {
-			header Content-Type application/json
-		}
-		
-		respond @403 `{"error": "Forbidden"}` 403 {
-			header Content-Type application/json
-		}
-		
-		respond @404 `{"error": "Workspace not found"}` 404 {
-			header Content-Type application/json
-		}
-		
-		respond @500 `{"error": "Internal Server Error"}` 500 {
-			header Content-Type application/json
-		}
+		respond @400 `{"error": "Bad Request"}` 400
+		respond @401 `{"error": "Unauthorized"}` 401
+		respond @403 `{"error": "Forbidden"}` 403
+		respond @404 `{"error": "Workspace not found"}` 404
+		respond @500 `{"error": "Internal Server Error"}` 500
 		
 		# Default error
-		respond `{"error": "An error occurred"}` {err.status_code} {
-			header Content-Type application/json
-		}
+		respond `{"error": "An error occurred"}` {err.status_code}
 	}
 }
 
