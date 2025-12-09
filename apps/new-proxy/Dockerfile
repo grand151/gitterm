@@ -15,8 +15,7 @@ RUN mkdir -p /var/log/nginx && \
 
 # Perform environment variable substitution as root (before switching user)
 # This creates the final nginx.conf with substituted variables
-RUN mkdir -p /etc/nginx/templates
-COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY ./apps/new-proxy/nginx.conf.template /etc/nginx/templates/default.conf.template
 RUN envsubst '$INTERNAL_API_KEY' < /etc/nginx/templates/default.conf.template > /etc/nginx/nginx.conf
 
 # Switch to non-root user
