@@ -52,3 +52,7 @@ temp
 # Workspace
 /.docker
 /.github-app
+
+# SSL certificates
+/apps/new-proxy/gitterm.dev.pem
+/apps/new-proxy/gitterm.dev.key
