@@ -9,10 +9,5 @@
         "package.json",
         "bun.lock"
     ]
-  },
-  "deploy": {
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 100,
-    "restartPolicyType": "never"
   }
 }
