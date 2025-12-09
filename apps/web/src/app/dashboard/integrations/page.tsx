@@ -45,7 +45,7 @@ export default function IntegrationsPage() {
         text="Connect external services to enhance your workspace capabilities"
       />
       
-      <div className="grid gap-6 max-w-4xl">
+      <div className="grid justify-center items-center gap-6 max-w-4xl">
         {/* Active Integrations */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
@@ -123,21 +123,6 @@ export default function IntegrationsPage() {
             </Card>
           </div>
         </div>
-
-        {/* Info Card */}
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="pt-6">
-            <div className="flex gap-3">
-              <AlertCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-medium text-sm">Need help with integrations?</p>
-                <p className="text-sm text-muted-foreground">
-                  Check out our documentation or contact support if you're having trouble connecting your accounts.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </DashboardShell>
   );
