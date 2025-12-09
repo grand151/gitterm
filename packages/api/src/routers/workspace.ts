@@ -127,10 +127,17 @@ export const workspaceRouter = router({
     }
 
     try {
-      const workspaces = await db
-        .select()
-        .from(workspace)
-        .where(eq(workspace.userId, userId));
+      const workspaces = await db.query.workspace.findMany({
+        where: eq(workspace.userId, userId),
+        with: {
+          image: {
+            with: {
+              agentType: true,
+            },
+          },
+        },
+      });
+
 
       return {
         success: true,

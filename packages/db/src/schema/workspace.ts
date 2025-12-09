@@ -97,6 +97,10 @@ export const workspaceRelations = relations(workspace, ({ one, many }) => ({
 		fields: [workspace.gitIntegrationId],
 		references: [gitIntegration.id],
 	}),
+	image: one(image, {
+		fields: [workspace.imageId],
+		references: [image.id],
+	}),
 }));
 
 export const usageSessionRelations = relations(usageSession, ({ one }) => ({

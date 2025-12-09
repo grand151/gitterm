@@ -62,7 +62,11 @@ export function InstanceList() {
   );
 }
 
-function InstanceCard({ workspace, providers }: { workspace: any; providers: any[] }) {
+type Workspace = typeof trpc.workspace.listWorkspaces["~types"]["output"]["workspaces"][number];
+
+type CloudProvider = typeof trpc.workspace.listCloudProviders["~types"]["output"]["cloudProviders"][number];
+
+function InstanceCard({ workspace, providers }: { workspace: Workspace; providers: CloudProvider[] }) {
   const deleteServiceMutation = useMutation(trpc.workspace.deleteWorkspace.mutationOptions({
     onSuccess: () => {
       toast.success("Workspace terminated successfully");
@@ -156,16 +160,21 @@ function InstanceCard({ workspace, providers }: { workspace: any; providers: any
               <div className="p-1.5 rounded-md bg-primary/10">
                 <Box className="h-3.5 w-3.5 text-primary shrink-0" />
               </div>
-              <CardTitle className="text-sm font-semibold truncate">
-                {workspace.subdomain}
-              </CardTitle>
+              <div className="flex flex-row items-center gap-2 min-w-0 flex-1">
+                <CardTitle className="text-sm font-semibold truncate">
+                  {workspace.subdomain}
+                </CardTitle>
+                <span className="text-xs font-bold text-muted-foreground truncate">
+                  ({workspace.image.agentType.name})
+                </span>
+              </div>
             </div>
             {getStatusBadge(workspace.status)}
           </div>
           {getRepoName() && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 pl-8">
               <GitBranch className="h-3 w-3 shrink-0" />
-              <span className="truncate font-mono" title={workspace.repositoryUrl}>
+              <span className="truncate font-mono" title={workspace.repositoryUrl || ""}>
                 {getRepoName()}
               </span>
             </div>

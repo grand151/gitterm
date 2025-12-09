@@ -75,6 +75,13 @@ export const regionRelations = relations(region, ({ one, many}) => ({
 	volumes: many(volume),
 }));
 
+export const imageRelations = relations(image, ({ one }) => ({
+	agentType: one(agentType, {
+		fields: [image.agentTypeId],
+		references: [agentType.id],
+	})
+}));
+
 
 export type NewCloudProvider = typeof cloudProvider.$inferInsert;
 export type NewImage = typeof image.$inferInsert;
