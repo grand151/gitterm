@@ -200,100 +200,103 @@ const server = http.createServer(async (req: any, res: any) => {
     // =========================================================================
     // FIX FOR SSE: Manual Proxy with No Timeouts & Instant Flushing
     // =========================================================================
-    if (isStreamingEndpoint) {
-      console.log(`[${ws.id}] Using manual SSE proxy for: ${req.url}`);
-      
-      // 1. CRITICAL: Disable timeouts for SSE. Connections must stay open.
-      if (req.socket) {
-        req.socket.setTimeout(0); 
-        req.socket.setNoDelay(true); // Disable Nagle's algorithm for instant updates
-        req.socket.setKeepAlive(true);
-      }
+// Handle SSE manually - http-proxy doesn't work well with streaming
+if (isStreamingEndpoint) {
+  console.log(`[${ws.id}] Using manual SSE proxy for: ${req.url}`);
+  
+  // 1. Disable timeouts/buffering on the Client connection
+  if (req.socket) {
+    req.socket.setTimeout(0); 
+    req.socket.setNoDelay(true); 
+    req.socket.setKeepAlive(true);
+  }
 
-      const backendUrl = new URL(ws.backendUrl);
-      
-      const options: http.RequestOptions = {
-        hostname: backendUrl.hostname,
-        port: backendUrl.port || 80,
-        path: req.url,
-        method: req.method,
-        headers: {
-          ...req.headers,
-          host: backendUrl.host,
-          'x-forwarded-for': req.socket.remoteAddress || '',
-          'x-forwarded-proto': 'https',
-          'x-forwarded-host': host,
-          // Force connection keep-alive to backend
-          'connection': 'keep-alive',
-          'cache-control': 'no-cache' 
-        },
-        family: 6,
-        // Ensure agent keeps socket open
-        agent: new https.Agent({ 
-            keepAlive: true,
-            maxSockets: Infinity 
-        })
-      };
-      
-      if (!ws.serverOnly && userId) {
-        (options.headers as any)['x-auth-user'] = userId;
-      }
-      
-      // const requestModule = backendUrl.protocol === 'https:' ? https : http;
-      const proxyReq = https.request(options, (proxyRes) => {
-        console.log(`[${ws.id}] SSE response: ${proxyRes.statusCode} for ${req.url}`);
-        
-        // 2. Force SSE Headers on the response to the client
-        const headers = {
-          ...proxyRes.headers,
-          'content-type': 'text/event-stream', // Force correct type
-          'cache-control': 'no-cache, no-transform',
-          'connection': 'keep-alive',
-          'x-accel-buffering': 'no', // Tell Nginx/Cloudflare not to buffer
-          'transfer-encoding': 'chunked' // Usually implied, but good to be explicit for streams
-        };
+  const backendUrl = new URL(ws.backendUrl);
+  
+  // 2. Use specific agent to keep connection alive
+  // We use http.Agent because we are reverting to standard HTTP port 80 behavior
+  // which you confirmed was connecting (albeit timing out) before.
+  const agent = new http.Agent({ 
+    family: 6, // Maintain IPv6 for Railway
+    keepAlive: true,
+    maxSockets: Infinity 
+  });
 
-        // Remove Content-Length if it exists (SSE is infinite)
-        delete headers['content-length'];
+  const options: http.RequestOptions = {
+    hostname: backendUrl.hostname,
+    // Revert to your original port logic which successfully found the server
+    port: backendUrl.port || 80, 
+    path: req.url,
+    method: req.method,
+    headers: {
+      ...req.headers,
+      host: backendUrl.host,
+      'x-forwarded-for': req.socket.remoteAddress || '',
+      'x-forwarded-proto': 'https',
+      'x-forwarded-host': host,
+      'connection': 'keep-alive', // Vital for SSE
+      'cache-control': 'no-cache'
+    },
+    agent: agent,
+    family: 6,
+  };
+  
+  if (!ws.serverOnly && userId) {
+    (options.headers as any)['x-auth-user'] = userId;
+  }
+  
+  // 3. Use http.request (not https) to match your original successful connectivity
+  const proxyReq = http.request(options, (proxyRes) => {
+    console.log(`[${ws.id}] SSE response: ${proxyRes.statusCode} for ${req.url}`);
+    
+    // 4. Force correct SSE headers
+    const headers = {
+      ...proxyRes.headers,
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache, no-transform',
+      'x-accel-buffering': 'no', // Critical for Cloudflare/Nginx
+      'connection': 'keep-alive',
+      'transfer-encoding': 'chunked'
+    };
 
-        res.writeHead(proxyRes.statusCode || 200, headers);
-        
-        // 3. Flush headers immediately if method exists (Node 15+)
-        if (res.flushHeaders) res.flushHeaders();
+    delete headers['content-length'];
 
-        // 4. Pipe with heartbeat monitoring
-        proxyRes.on('data', (chunk) => {
-          // Keep the workspace "active" in your DB whenever data flows
-          updateWorkspaceHeartbeat(ws.id);
-          res.write(chunk);
-          // 5. Explicitly flush output if using compression middleware (though not present here, safety first)
-          if ((res as any).flush) (res as any).flush();
-        });
+    res.writeHead(proxyRes.statusCode || 200, headers);
+    
+    // 5. Force flush headers immediately
+    if (res.flushHeaders) res.flushHeaders();
+    
+    proxyRes.on('data', (chunk) => {
+      updateWorkspaceHeartbeat(ws.id);
+      res.write(chunk);
+      // Flush immediately if method is available
+      if ((res as any).flush) (res as any).flush();
+    });
 
-        proxyRes.on('end', () => {
-          console.log(`[${ws.id}] SSE Stream ended by backend`);
-          res.end();
-        });
+    proxyRes.on('end', () => {
+      console.log(`[${ws.id}] SSE Stream ended`);
+      res.end();
+    });
 
-        proxyRes.on('error', (err) => {
-          console.error(`[${ws.id}] SSE stream error:`, err.message);
-          res.end();
-        });
-      });
-      
-      proxyReq.on('error', (err) => {
-        console.error(`[${ws.id}] SSE request error:`, err.message);
-        if (!res.headersSent) {
-          res.writeHead(502);
-          res.end('Bad Gateway');
-        }
-      });
-      
-      // Forward request body if any
-      req.pipe(proxyReq);
-      
-      return; // STOP execution here so we don't trigger the timeouts below
+    proxyRes.on('error', (err) => {
+      console.error(`[${ws.id}] SSE stream error:`, err.message);
+      res.end();
+    });
+  });
+  
+  proxyReq.on('error', (err) => {
+    console.error(`[${ws.id}] SSE request error:`, err.message);
+    if (!res.headersSent) {
+      res.writeHead(502);
+      res.end('Bad Gateway');
     }
+  });
+  
+  // Forward request body if any
+  req.pipe(proxyReq);
+  
+  return; 
+}
     
     // ... [KEEP YOUR MANUAL BUFFERING BLOCK FOR STATIC ASSETS HERE] ...
     if (isStaticAsset) {
