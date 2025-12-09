@@ -4,7 +4,7 @@ FROM nginx:alpine
 RUN apk add --no-cache curl
 
 # Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY ./apps/new-proxy/nginx.conf /etc/nginx/nginx.conf
 
 # Create log directory with proper permissions
 RUN mkdir -p /var/log/nginx && \
