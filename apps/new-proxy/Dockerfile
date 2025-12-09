@@ -1,18 +1,10 @@
-FROM nginx:alpine
+FROM caddy:2-alpine
 
-# Copy nginx template to the templates directory
-# The nginx entrypoint will automatically process templates with envsubst (nginx 1.19+)
+# Copy Caddyfile
+COPY ./apps/new-proxy/Caddyfile /etc/caddy/Caddyfile
 
-# RUN mkdir -p /etc/ssl/certs /etc/ssl/private
-
-# COPY ./apps/new-proxy/gitterm.dev.pem /etc/ssl/certs/gitterm.pem
-# COPY ./apps/new-proxy/gitterm.dev.key /etc/ssl/private/gitterm.key
-
-COPY ./apps/new-proxy/nginx.conf /etc/nginx/nginx.conf
-
-# COPY ./nginx.conf /etc/nginx/nginx.conf
-
-# Expose port
+# Expose port 80 (Railway will handle external routing)
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Caddy runs as non-root by default and auto-starts
+# No need for explicit CMD, uses default: caddy run --config /etc/caddy/Caddyfile

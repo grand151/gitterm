@@ -1,0 +1,131 @@
+{
+	# Global options
+	auto_https off
+	admin off
+	
+	# Server options
+	servers {
+		protocols h1 h2
+	}
+}
+
+# Wildcard match for all *.gitterm.dev subdomains
+*.gitterm.dev {
+	# Health check endpoint
+	handle /health {
+		respond `{"status":"UP"}` 200 {
+			header Content-Type application/json
+		}
+	}
+
+	# Main proxy handler
+	handle {
+		# Forward auth to API server
+		forward_auth server.railway.internal:8080 {
+			uri /internal/proxy-resolve
+			
+			# Copy original headers
+			header_up Host {host}
+			header_up X-Internal-Key "EdBY7UDhP-bVJbAns_E9yiFbx_B!tg_"
+			header_up Cookie {header.Cookie}
+			header_up Authorization {header.Authorization}
+			header_up X-Original-URI {uri}
+			header_up X-Original-Method {method}
+			header_up X-Forwarded-For {remote_ip}
+			
+			# Extract container info from auth response
+			copy_headers {
+				X-Container-Host>container_host
+				X-Container-Port>container_port
+			}
+		}
+
+		# Reverse proxy to the resolved container
+		reverse_proxy {vars.container_host}:{vars.container_port} {
+			# WebSocket support - Caddy handles this automatically
+			# But we ensure headers are passed through correctly
+			header_up Upgrade {header.Upgrade}
+			header_up Connection {header.Connection}
+			header_up Sec-WebSocket-Key {header.Sec-WebSocket-Key}
+			header_up Sec-WebSocket-Version {header.Sec-WebSocket-Version}
+			header_up Sec-WebSocket-Protocol {header.Sec-WebSocket-Protocol}
+			header_up Sec-WebSocket-Extensions {header.Sec-WebSocket-Extensions}
+			
+			# Standard proxy headers
+			header_up Host {host}
+			header_up X-Real-IP {remote_ip}
+			header_up X-Forwarded-For {remote_ip}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			
+			# Pass through User-Agent for ttyd logging
+			header_up User-Agent {header.User-Agent}
+			
+			# Pass through cookies if any (for session management)
+			header_up Cookie {header.Cookie}
+			
+			# Transport settings optimized for WebSocket/ttyd
+			transport http {
+				# Keep compression OFF to avoid interfering with WebSocket frames
+				# ttyd handles its own compression via permessage-deflate
+				compression off
+				
+				# Dial timeout - how long to wait for connection to workspace
+				dial_timeout 10s
+				
+				# No timeouts for long-lived WebSocket connections
+				# ttyd connections can be idle for long periods
+				response_header_timeout 0
+				expect_continue_timeout 0
+				
+				# Keep connections alive
+				keepalive 2m
+				keepalive_idle_conns 10
+				
+				# Read buffer for WebSocket frames (ttyd can send large terminal outputs)
+				read_buffer 32768
+				write_buffer 32768
+			}
+		}
+	}
+
+	# Error handling
+	handle_errors {
+		@400 expression {err.status_code} == 400
+		@401 expression {err.status_code} == 401
+		@403 expression {err.status_code} == 403
+		@404 expression {err.status_code} == 404
+		@500 expression {err.status_code} >= 500
+
+		respond @400 `{"error": "Bad Request"}` 400 {
+			header Content-Type application/json
+		}
+		
+		respond @401 `{"error": "Unauthorized"}` 401 {
+			header Content-Type application/json
+		}
+		
+		respond @403 `{"error": "Forbidden"}` 403 {
+			header Content-Type application/json
+		}
+		
+		respond @404 `{"error": "Workspace not found"}` 404 {
+			header Content-Type application/json
+		}
+		
+		respond @500 `{"error": "Internal Server Error"}` 500 {
+			header Content-Type application/json
+		}
+		
+		# Default error
+		respond `{"error": "An error occurred"}` {err.status_code} {
+			header Content-Type application/json
+		}
+	}
+}
+
+# Bind to port 80 (Railway will handle external routing)
+:80 {
+	# Redirect anything not matching *.gitterm.dev
+	respond "Not Found" 404
+}
