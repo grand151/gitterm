@@ -5,8 +5,6 @@ FROM nginx:alpine
 
 RUN mkdir -p /etc/ssl/certs /etc/ssl/private
 
-USER nginx;
-
 COPY ./apps/new-proxy/gitterm.dev.pem /etc/ssl/certs/gitterm.pem;
 COPY ./apps/new-proxy/gitterm.dev.key /etc/ssl/private/gitterm.key;
 
