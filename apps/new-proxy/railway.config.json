@@ -7,7 +7,6 @@
   "deploy": {
     "healthcheckPath": "/health",
     "healthcheckTimeout": 100,
-    "restartPolicyType": "never",
-    "startCommand": "nginx -g 'daemon off;'"
+    "restartPolicyType": "never"
   }
 }
