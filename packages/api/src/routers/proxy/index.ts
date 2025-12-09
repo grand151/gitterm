@@ -37,6 +37,7 @@ export const proxyResolverRouter = async (c: Context) => {
 		  headers: c.req.raw.headers,
 		});
 	
+    
 		// Check workspace
 		const [ws] = await db
 		  .select()
@@ -45,6 +46,8 @@ export const proxyResolverRouter = async (c: Context) => {
 		  .limit(1);
 	
 		if (!ws) {
+            console.log('Looking for subdomain:', subdomain);
+            console.log('Workspace not found');
 		  return c.text('Not Found', 404);
 		}
 	
