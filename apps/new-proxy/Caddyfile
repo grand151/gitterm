@@ -9,15 +9,15 @@
 	}
 }
 
-# Wildcard match for all *.gitterm.dev subdomains
-*.gitterm.dev {
+# Listen on port 80 for all requests
+:80 {
 	# Health check endpoint
 	handle /health {
 		header Content-Type application/json
 		respond `{"status":"UP"}` 200
 	}
 
-	# Main proxy handler
+	# Main proxy handler  
 	handle {
 		# Forward auth to API server
 		forward_auth server.railway.internal:8080 {
@@ -107,10 +107,4 @@
 		# Default error
 		respond `{"error": "An error occurred"}` {err.status_code}
 	}
-}
-
-# Bind to port 80 (Railway will handle external routing)
-:80 {
-	# Redirect anything not matching *.gitterm.dev
-	respond "Not Found" 404
 }
