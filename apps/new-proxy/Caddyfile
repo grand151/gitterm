@@ -39,7 +39,8 @@
 
 		# Reverse proxy to the workspace container
 		# Construct upstream from captured subdomain: {http.regexp.subdomain.1}.railway.internal:7681
-		reverse_proxy @workspace http://{http.regexp.subdomain.1}.railway.internal:7681 {
+		# Note: Don't include http:// scheme when using placeholders
+		reverse_proxy @workspace {http.regexp.subdomain.1}.railway.internal:7681 {
 			# WebSocket support
 			header_up Upgrade {header.Upgrade}
 			header_up Connection {header.Connection}
