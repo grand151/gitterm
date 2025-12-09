@@ -2,8 +2,8 @@
 
 # http block contents start here:
 
-# Variable mapping for WebSocket/HTTP Upgrade
-map $$http_upgrade $$connection_upgrade {
+# Correctly escape Nginx variables inside the map block definition
+map \$http_upgrade \$connection_upgrade {
     default upgrade;
     '' close;
 }
@@ -27,6 +27,7 @@ server {
     location / {
         # Authentication and routing setup
         auth_request /auth-resolve;
+        # Keep $$ for Nginx variable usage
         auth_request_set $$container_path $$upstream_http_x_container_path;
         
         # Error page handlers
@@ -60,7 +61,7 @@ server {
         proxy_pass http://api_backend/internal/proxy-resolve; 
         
         proxy_set_header Host $$host;
-        # 🔑 The only environment variable being substituted by envsubst
+        # The only environment variable being substituted by envsubst
         proxy_set_header X-Internal-Key "${INTERNAL_API_KEY}";  
         proxy_set_header Cookie $$http_cookie;
         proxy_set_header Authorization $$http_authorization;
