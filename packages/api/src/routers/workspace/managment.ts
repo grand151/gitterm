@@ -823,8 +823,8 @@ export const workspaceRouter = router({
         });
       }
 
-      if (fetchedUser && !fetchedUser.allowTrial) 
-        throw new TRPCError({ code: "FORBIDDEN", message: "Reachout for Access" });
+      // if (fetchedUser && !fetchedUser.allowTrial) 
+      //   throw new TRPCError({ code: "FORBIDDEN", message: "Reachout for Access" });
 
       try {
         // Check quota first
