@@ -25,23 +25,28 @@ export class Multiplexer {
 				reject(new Error("tunnel response timeout"));
 			}, timeoutMs);
 
-			// Create stream - the start callback will update the entry's controller
+			// Capture controller directly - Bun calls start() synchronously
+			let capturedController: ReadableStreamDefaultController<Uint8Array> | undefined;
+
 			const stream = new ReadableStream<Uint8Array>({
 				start: (controller) => {
-					console.log("[MUX] ReadableStream.start - controller initialized:", { id });
+					console.log("[MUX] ReadableStream.start - controller captured:", { id });
+					capturedController = controller;
+				},
+				pull: (controller) => {
+					// Called when consumer wants more data - flush any buffered chunks
 					const entry = this.pending.get(id);
-					if (entry) {
-						entry.controller = controller;
-						console.log("[MUX] ReadableStream.start - controller assigned, flushing buffer:", { 
+					if (entry && entry.bufferedChunks.length > 0) {
+						console.log("[MUX] ReadableStream.pull - flushing buffer:", { 
 							id, 
 							bufferedCount: entry.bufferedChunks.length 
 						});
-						// Flush any buffered chunks
 						for (const { chunk, final } of entry.bufferedChunks) {
 							if (chunk.byteLength > 0) controller.enqueue(chunk);
 							if (final) {
 								controller.close();
 								this.pending.delete(id);
+								return;
 							}
 						}
 						entry.bufferedChunks = [];
@@ -53,17 +58,18 @@ export class Multiplexer {
 				},
 			});
 
+			// Now capturedController is set (since start() ran synchronously)
 			const entry: PendingStreamResponse = {
 				resolve,
 				reject,
 				timer,
-				controller: undefined, // Will be set by start() callback
+				controller: capturedController,
 				stream,
 				resolved: false,
 				bufferedChunks: [],
 			};
 
-			console.log("[MUX] register - entry created:", { id });
+			console.log("[MUX] register - entry created:", { id, hasController: !!capturedController });
 			this.pending.set(id, entry);
 		});
 	}
