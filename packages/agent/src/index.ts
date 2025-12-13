@@ -327,6 +327,7 @@ async function runConnect(rawArgs: string[]) {
 
 	const pendingRequestBodies = new Map<string, Uint8Array[]>();
 	const pendingRequestMeta = new Map<string, PendingRequestMeta>();
+	const activeRequests = new Map<string, AbortController>();
 
 	function mergeBody(id: string): Uint8Array {
 		const parts = pendingRequestBodies.get(id) ?? [];
@@ -380,6 +381,18 @@ async function runConnect(rawArgs: string[]) {
 		if (frame.type === "open") return;
 		if (frame.type === "auth") return;
 
+		// Handle close frame - abort the ongoing request
+		if (frame.type === "close") {
+			const controller = activeRequests.get(frame.id);
+			if (controller) {
+				controller.abort();
+				activeRequests.delete(frame.id);
+			}
+			pendingRequestBodies.delete(frame.id);
+			pendingRequestMeta.delete(frame.id);
+			return;
+		}
+
 		if (frame.type === "request") {
 			pendingRequestBodies.set(frame.id, []);
 			pendingRequestMeta.set(frame.id, {
@@ -396,6 +409,10 @@ async function runConnect(rawArgs: string[]) {
 			if (!chunks) return;
 			if (frame.data) chunks.push(base64ToBytes(frame.data));
 			if (!frame.final) return;
+
+			// Create abort controller for this request
+			const abortController = new AbortController();
+			activeRequests.set(frame.id, abortController);
 
 			try {
 				const meta = pendingRequestMeta.get(frame.id);
@@ -419,6 +436,7 @@ async function runConnect(rawArgs: string[]) {
 					headers,
 					body: reqBody.byteLength > 0 ? reqBody : undefined,
 					redirect: "manual",
+					signal: abortController.signal,
 				});
 
 				ws.send(
@@ -432,30 +450,43 @@ async function runConnect(rawArgs: string[]) {
 				);
 
 				if (!upstream.body) {
+					activeRequests.delete(frame.id);
 					ws.send(JSON.stringify({ type: "data", id: frame.id, final: true, timestamp: Date.now() } satisfies Frame));
 					return;
 				}
 
 				const reader = upstream.body.getReader();
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-					if (!value) continue;
-					ws.send(
-						JSON.stringify({
-							type: "data",
-							id: frame.id,
-							data: bytesToBase64(value),
-							final: false,
-							timestamp: Date.now(),
-						} satisfies Frame),
-					);
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) break;
+						if (!value) continue;
+						ws.send(
+							JSON.stringify({
+								type: "data",
+								id: frame.id,
+								data: bytesToBase64(value),
+								final: false,
+								timestamp: Date.now(),
+							} satisfies Frame),
+						);
+					}
+				} finally {
+					reader.releaseLock();
 				}
 
+				activeRequests.delete(frame.id);
 				ws.send(JSON.stringify({ type: "data", id: frame.id, final: true, timestamp: Date.now() } satisfies Frame));
 			} catch (error) {
+				activeRequests.delete(frame.id);
 				pendingRequestMeta.delete(frame.id);
 				pendingRequestBodies.delete(frame.id);
+				
+				// Don't send error response if request was aborted (client disconnected)
+				if (error instanceof Error && error.name === "AbortError") {
+					return;
+				}
+				
 				ws.send(
 					JSON.stringify({
 						type: "response",
@@ -492,6 +523,12 @@ async function runConnect(rawArgs: string[]) {
 	});
 
 	console.log("\nShutting down...");
+
+	// Abort all active requests
+	for (const controller of activeRequests.values()) {
+		controller.abort();
+	}
+	activeRequests.clear();
 
 	// Clean up pending requests
 	pendingRequestBodies.clear();
