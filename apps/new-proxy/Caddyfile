@@ -58,7 +58,18 @@
 		@workspace header_regexp subdomain Host ^([^.]+)\.gitterm\.dev$
 
 		# Local tunnels route through tunnel-proxy
-		@local_tunnel header X-Tunnel-Type local
+		# Match on X-Tunnel-Type header set by forward_auth
+		@local_tunnel {
+			header X-Tunnel-Type local
+		}
+		
+		# Cloud workspaces route directly to containers
+		# Match workspace subdomain but NOT local tunnel type
+		@cloud_workspace {
+			not header X-Tunnel-Type local
+			header_regexp subdomain Host ^([^.]+)\.gitterm\.dev$
+		}
+
 		reverse_proxy @local_tunnel tunnel-proxy.railway.internal:9000 {
 			# WebSocket support
 			header_up Upgrade {header.Upgrade}
@@ -72,8 +83,10 @@
 			header_up Host {host}
 			header_up X-Real-IP {remote_ip}
 			header_up X-Forwarded-For {remote_ip}
-			header_up User-Agent {header.User-Agent}
+			header_up X-User-Agent {header.User-Agent}
 			header_up Cookie {header.Cookie}
+			header_up X-Subdomain {header.X-Subdomain}
+			header_up X-Tunnel-Type {header.X-Tunnel-Type}
 
 			transport http {
 				compression off
@@ -90,7 +103,7 @@
 		# Reverse proxy to the workspace container
 		# Construct upstream from captured subdomain: {http.regexp.subdomain.1}.railway.internal:7681
 		# Note: Don't include http:// scheme when using placeholders
-		reverse_proxy @workspace {http.regexp.subdomain.1}.railway.internal:7681 {
+		reverse_proxy @cloud_workspace {http.regexp.subdomain.1}.railway.internal:7681 {
 			# WebSocket support
 			header_up Upgrade {header.Upgrade}
 			header_up Connection {header.Connection}
