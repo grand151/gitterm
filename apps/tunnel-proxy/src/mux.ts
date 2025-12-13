@@ -6,6 +6,7 @@ export interface PendingStreamResponse {
 	stream: ReadableStream<Uint8Array>;
 	resolved: boolean;
 	bufferedChunks: Array<{ chunk: Uint8Array; final: boolean }>;
+	onCancel?: () => void;
 }
 
 // Request/response correlator with streaming body support.
@@ -16,7 +17,7 @@ export class Multiplexer {
 		return crypto.randomUUID();
 	}
 
-	register(id: string, timeoutMs: number): Promise<Response> {
+	register(id: string, timeoutMs: number, onCancel?: () => void): Promise<Response> {
 		return new Promise((resolve, reject) => {
 			const timer = setTimeout(() => {
 				const entry = this.pending.get(id);
@@ -30,17 +31,12 @@ export class Multiplexer {
 
 			const stream = new ReadableStream<Uint8Array>({
 				start: (controller) => {
-					console.log("[MUX] ReadableStream.start - controller captured:", { id });
 					capturedController = controller;
 				},
 				pull: (controller) => {
 					// Called when consumer wants more data - flush any buffered chunks
 					const entry = this.pending.get(id);
 					if (entry && entry.bufferedChunks.length > 0) {
-						console.log("[MUX] ReadableStream.pull - flushing buffer:", { 
-							id, 
-							bufferedCount: entry.bufferedChunks.length 
-						});
 						for (const { chunk, final } of entry.bufferedChunks) {
 							if (chunk.byteLength > 0) controller.enqueue(chunk);
 							if (final) {
@@ -53,7 +49,8 @@ export class Multiplexer {
 					}
 				},
 				cancel: () => {
-					console.log("[MUX] ReadableStream.cancel:", { id });
+					const entry = this.pending.get(id);
+					if (entry?.onCancel) entry.onCancel();
 					this.pending.delete(id);
 				},
 			});
@@ -67,9 +64,10 @@ export class Multiplexer {
 				stream,
 				resolved: false,
 				bufferedChunks: [],
+				onCancel,
 			};
 
-			console.log("[MUX] register - entry created:", { id, hasController: !!capturedController });
+			console.log("[MUX] register:", { id, hasController: !!capturedController });
 			this.pending.set(id, entry);
 		});
 	}
@@ -79,29 +77,22 @@ export class Multiplexer {
 		if (!entry || entry.resolved) return;
 		clearTimeout(entry.timer);
 		entry.resolved = true;
-		console.log("[MUX] resolveResponse - creating Response with stream:", { id, hasController: !!entry.controller });
 		entry.resolve(new Response(entry.stream, responseInit));
 	}
 
 	pushData(id: string, chunk: Uint8Array, final: boolean) {
 		const entry = this.pending.get(id);
-		if (!entry || !entry.resolved) {
-			console.log("[MUX] pushData - entry not found or not resolved:", { id, hasEntry: !!entry, resolved: entry?.resolved });
-			return;
-		}
+		if (!entry || !entry.resolved) return;
 		
 		// If controller not ready yet, buffer the chunk
 		if (!entry.controller) {
-			console.log("[MUX] pushData - controller not ready, buffering chunk:", { id, chunkSize: chunk.byteLength, final });
 			entry.bufferedChunks.push({ chunk, final });
 			return;
 		}
 		
 		// Controller is ready, enqueue directly
-		console.log("[MUX] pushData - enqueueing chunk:", { id, chunkSize: chunk.byteLength, final });
 		if (chunk.byteLength > 0) entry.controller.enqueue(chunk);
 		if (final) {
-			console.log("[MUX] pushData - closing stream:", { id });
 			entry.controller.close();
 			this.pending.delete(id);
 		}
