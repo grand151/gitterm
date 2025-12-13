@@ -24,19 +24,26 @@ export class Multiplexer {
 				reject(new Error("tunnel response timeout"));
 			}, timeoutMs);
 
+			const stream = new ReadableStream<Uint8Array>({
+				start: (controller) => {
+					// Update the entry with the controller after it's been added to the map
+					const entry = this.pending.get(id);
+					if (entry) {
+						entry.controller = controller;
+					}
+				},
+				cancel: () => {
+					this.pending.delete(id);
+				},
+			});
+
 			const entry: PendingStreamResponse = {
 				resolve,
 				reject,
 				timer,
+				controller: undefined,
+				stream,
 				resolved: false,
-				stream: new ReadableStream<Uint8Array>({
-					start: (controller) => {
-						entry.controller = controller;
-					},
-					cancel: () => {
-						this.pending.delete(id);
-					},
-				}),
 			};
 
 			this.pending.set(id, entry);
