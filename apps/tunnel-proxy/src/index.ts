@@ -250,8 +250,10 @@ app.all("/*", async (c) => {
 
 	// Register for response BEFORE sending request to avoid race condition
 	// where agent responds before we're ready to receive
-	const responsePromise = agent.mux.register(requestId, 30_000, () => {
+	// Use longer timeout (120s) to handle slow AI responses
+	const responsePromise = agent.mux.register(requestId, 120_000, () => {
 		// onCancel: notify agent to stop sending data for this request
+		console.log("[TUNNEL-PROXY] Stream cancelled, sending close frame:", { requestId });
 		try {
 			agent.ws.send(JSON.stringify({ 
 				type: "close", 

@@ -383,10 +383,14 @@ async function runConnect(rawArgs: string[]) {
 
 		// Handle close frame - abort the ongoing request
 		if (frame.type === "close") {
+			console.log("[AGENT] Received close frame:", { id: frame.id });
 			const controller = activeRequests.get(frame.id);
 			if (controller) {
+				console.log("[AGENT] Aborting request:", { id: frame.id });
 				controller.abort();
 				activeRequests.delete(frame.id);
+			} else {
+				console.log("[AGENT] No active request to abort:", { id: frame.id });
 			}
 			pendingRequestBodies.delete(frame.id);
 			pendingRequestMeta.delete(frame.id);
@@ -437,6 +441,7 @@ async function runConnect(rawArgs: string[]) {
 				headers.delete("host");
 				headers.delete("content-length");
 
+				console.log("[AGENT] Fetching upstream:", { id: frame.id, url: url.toString(), method: meta.method });
 				const upstream = await fetch(url, {
 					method: meta.method,
 					headers,
