@@ -1,5 +1,5 @@
 import { auth } from "@gitpad/auth";
-import { db, eq } from "@gitpad/db";
+import { db, eq, and } from "@gitpad/db";
 import { workspace } from "@gitpad/db/schema/workspace";
 import type { Context } from "hono";
 
@@ -43,11 +43,15 @@ export const proxyResolverRouter = async (c: Context) => {
 		});
 	
     
-		// Check workspace
+		// Check workspace - only match active (running) workspaces
+		// Subdomain is not unique, so we must filter by status to get the correct one
 		const [ws] = await db
 		  .select()
 		  .from(workspace)
-		  .where(eq(workspace.subdomain, subdomain))
+		  .where(and(
+			eq(workspace.subdomain, subdomain),
+			eq(workspace.status, 'running')
+		  ))
 		  .limit(1);
 	
 		if (!ws) {
