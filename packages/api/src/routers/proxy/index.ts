@@ -63,8 +63,22 @@ export const proxyResolverRouter = async (c: Context) => {
 			userId: ws.userId
 		});
 	
-		// Local tunnels: route via tunnel-proxy (still requires auth)
+		// Local tunnels: route via tunnel-proxy
 		if (ws.tunnelType === "local") {
+			// Server-only local tunnels skip auth (for API servers, etc.)
+			if (ws.serverOnly) {
+				console.log('[PROXY-RESOLVE] Local tunnel (server-only) - skipping auth:', { 
+					subdomain: ws.subdomain,
+					workspaceId: ws.id
+				});
+				return c.text("OK", 200, {
+					"X-Tunnel-Type": "local",
+					"X-Workspace-ID": ws.id,
+					"X-Subdomain": ws.subdomain ?? "",
+				});
+			}
+
+			// Non-server-only local tunnels require auth
 			if (!session) {
 				console.log('[PROXY-RESOLVE] Local tunnel requires auth - no session');
 				return c.text("Unauthorized", 401);
