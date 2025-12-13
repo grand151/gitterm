@@ -42,7 +42,6 @@ export const proxyResolverRouter = async (c: Context) => {
 		  headers: c.req.raw.headers,
 		});
 	
-    
 		// Check workspace - only match active (running) workspaces
 		// Subdomain is not unique, so we must filter by status to get the correct one
 		const [ws] = await db

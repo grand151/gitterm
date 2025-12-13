@@ -164,14 +164,14 @@ app.get(
 				const agent = connectionManager.get(authedSubdomain);
 				if (!agent) return;
 
-				if (frame.type === "response") {
-					console.log("[TUNNEL-PROXY] Response from agent:", { id: frame.id, status: frame.statusCode });
-					agent.mux.resolveResponse(frame.id, {
-						status: frame.statusCode ?? 502,
-						headers: frame.headers,
-					});
-					return;
-				}
+			if (frame.type === "response") {
+				console.log("[TUNNEL-PROXY] Response from agent:", { id: frame.id, status: frame.statusCode, contentType: frame.headers?.["content-type"] });
+				agent.mux.resolveResponse(frame.id, {
+					status: frame.statusCode ?? 502,
+					headers: frame.headers,
+				});
+				return;
+			}
 
 				if (frame.type === "data") {
 					const bytes = frame.data ? base64ToBytes(frame.data) : new Uint8Array();
@@ -193,6 +193,7 @@ app.get(
 // HTTP handler for local tunnel traffic from Caddy.
 // Caddy passes `Host` and `X-Subdomain` headers.
 app.all("/*", async (c) => {
+	try {
 	if (c.req.path === "/health" || c.req.path.startsWith("/tunnel/")) {
 		return c.notFound();
 	}
@@ -266,7 +267,7 @@ app.all("/*", async (c) => {
 	});
 
 	agent.ws.send(JSON.stringify(requestFrame));
-	console.log("[TUNNEL-PROXY] Request sent to agent:", { requestId, path: requestFrame.path });
+	console.log("[TUNNEL-PROXY] Request sent to agent:", { requestId, method: requestFrame.method, path: requestFrame.path });
 
 	// Stream request body to agent.
 	if (c.req.raw.body) {
@@ -298,6 +299,16 @@ app.all("/*", async (c) => {
 				message: error instanceof Error ? error.message : "unknown error",
 			},
 			504,
+		);
+	}
+	} catch (outerError) {
+		console.error("[TUNNEL-PROXY] Unhandled error:", { path: c.req.path, error: outerError instanceof Error ? outerError.message : outerError, stack: outerError instanceof Error ? outerError.stack : undefined });
+		return c.json(
+			{
+				error: "internal_error",
+				message: outerError instanceof Error ? outerError.message : "unknown error",
+			},
+			500,
 		);
 	}
 });

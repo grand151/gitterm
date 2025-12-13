@@ -450,6 +450,10 @@ async function runConnect(rawArgs: string[]) {
 					signal: abortController.signal,
 				});
 
+				const contentType = upstream.headers.get("content-type") || "";
+				const isSSE = contentType.includes("text/event-stream");
+				console.log("[AGENT] Upstream response:", { id: frame.id, status: upstream.status, contentType, isSSE });
+
 				ws.send(
 					JSON.stringify({
 						type: "response",
