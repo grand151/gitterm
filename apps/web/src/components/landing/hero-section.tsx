@@ -24,8 +24,9 @@ export function HeroSection() {
             </h1>
 
             <p className="max-w-lg text-lg leading-relaxed text-muted-foreground">
-              Spin up cloud-hosted OpenCode environments in seconds. 
+              Spin up cloud-hosted <Link href={"https://opencode.ai/"} target="_blank" className="font-bold text-primary underline">OpenCode</Link> environments in seconds. 
               Or tunnel your local setup through secure, shareable URLs. 
+              <br />
               Code from any device, anywhere, with temporary or persisted workspaces.
             </p>
 
