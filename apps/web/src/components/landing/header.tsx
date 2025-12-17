@@ -40,7 +40,7 @@ export function LandingHeader() {
                 </Button>
               </Link>
               <Link href="/dashboard">
-                <Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground">
                   Get Started
                 </Button>
               </Link>

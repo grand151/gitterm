@@ -16,7 +16,7 @@ export function CTASection() {
         <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
           <Link href="/dashboard">
             <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90">
-              Get Started Free
+              Get Started for Free
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
@@ -26,7 +26,7 @@ export function CTASection() {
               size="lg"
               className="border-border text-foreground hover:bg-secondary bg-transparent"
             >
-              Source on Github Coming soon...
+              Source Coming soon...
             </Button>
           </Link>
         </div>

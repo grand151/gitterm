@@ -4,10 +4,10 @@ import { useEffect, useState } from "react"
 import { Cloud, Monitor, Terminal, Box, Globe, Loader2, Check, Server } from "lucide-react"
 
 const localCommands = [
-  { prompt: "$ npx @gitterm/agent login", delay: 100 },
+  { prompt: "$ npx @opeoginni/gitterm-agent login", delay: 100 },
   { output: "Logging in to gitterm...", delay: 800 },
   { output: "Logged in successfully!", delay: 600 },
-  { prompt: "$ npx @gitterm/agent connect --workspace-id ws_abc123 --port 3000", delay: 1200 },
+  { prompt: "$ npx @opeoginni/gitterm-agent connect --workspace-id ws_abc123 --port 3000", delay: 1200 },
   { output: "Establishing secure tunnel for workspace...", delay: 700 },
   { output: "Connected! Your local workspace is now live at:", delay: 500 },
   { output: "https://my-app.gitterm.dev", delay: 400, color: "border-green-500/50" },
