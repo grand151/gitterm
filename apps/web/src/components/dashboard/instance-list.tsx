@@ -4,10 +4,21 @@ import { trpc, queryClient } from "@/utils/trpc";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ExternalLink, Trash2, PlayCircle, GitBranch, Clock, Globe, Box, MapPin, StopCircle, Copy, Terminal, HeartPlusIcon, PauseIcon } from 'lucide-react';
+import { Loader2, ExternalLink, Trash2, PlayCircle, GitBranch, Clock, Globe, Box, MapPin, StopCircle, Copy, Terminal, HeartPlusIcon, PauseIcon, Monitor, Server } from 'lucide-react';
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useMutation, useQueries } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function InstanceList() {
   const [workspacesQuery, providersQuery] = useQueries({
@@ -67,6 +78,8 @@ type Workspace = typeof trpc.workspace.listWorkspaces["~types"]["output"]["works
 type CloudProvider = typeof trpc.workspace.listCloudProviders["~types"]["output"]["cloudProviders"][number];
 
 function InstanceCard({ workspace, providers }: { workspace: Workspace; providers: CloudProvider[] }) {
+  const [showConnectDialog, setShowConnectDialog] = useState(false);
+  
   const deleteServiceMutation = useMutation(trpc.workspace.deleteWorkspace.mutationOptions({
     onSuccess: () => {
       toast.success("Workspace terminated successfully");
@@ -146,15 +159,76 @@ function InstanceCard({ workspace, providers }: { workspace: Workspace; provider
   const isRunning = workspace.status === "running";
   const isStopped = workspace.status === "stopped";
   const isPending = workspace.status === "pending";
+  
+  // Check if this is a local instance
+  const isLocal = providers.find((p) => p.id === workspace.cloudProviderId)?.name.toLowerCase() === "local";
+  const isLocalPending = isPending && isLocal;
+  
+  // Generate the connect command for local instances only
+  // Pending local instances need the gitterm-agent connect command
+  // Running local instances can use opencode attach
+  const connectCommand = isLocal 
+    ? isPending 
+      ? `npx @opeoginni/gitterm-agent connect --workspace-id ${workspace.id}`
+      : workspace.domain 
+        ? `opencode attach https://${workspace.domain}`
+        : null
+    : null;
 
   return (
+    <>
+      <Dialog open={showConnectDialog} onOpenChange={setShowConnectDialog}>
+        <DialogContent className="sm:max-w-[525px] border-border/50 bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Connect to Local Instance</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Run this command to connect your local server to this tunnel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-3">
+              <Label className="text-sm font-medium">Run this command to connect:</Label>
+              <div className="flex gap-2">
+                <Input 
+                  value={connectCommand || ""} 
+                  readOnly 
+                  className="font-mono text-sm bg-secondary/50 border-border/50" 
+                />
+                <Button
+                  variant="outline"
+                  className="border-border/50 hover:bg-secondary/50"
+                  onClick={() => {
+                    if (connectCommand) {
+                      navigator.clipboard.writeText(connectCommand);
+                      toast.success("Copied to clipboard");
+                    }
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Once connected, your local server will be available at <span className="font-mono text-foreground">{workspace.subdomain}.gitterm.dev</span>
+              </p>
+            </div>
+            <DialogFooter>
+              <Button 
+                onClick={() => setShowConnectDialog(false)}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Done
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     <Card className="group overflow-hidden border-primary/10 bg-card/50 backdrop-blur-sm transition-all duration-200 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 flex flex-col">
       <CardHeader className="pb-3 px-5 pt-5">
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary/50 transition-colors">
-                <Box className="h-4 w-4 transition-colors text-primary" />
+                <Box className="h-6 w-6 transition-colors text-primary" />
               </div>
               <div className="flex flex-col min-w-0">
                 <CardTitle className="text-sm font-semibold truncate">
@@ -186,7 +260,7 @@ function InstanceCard({ workspace, providers }: { workspace: Workspace; provider
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Globe className="h-3.5 w-3.5 shrink-0" />
+            <Server className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">{regionInfo.providerName}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -203,23 +277,60 @@ function InstanceCard({ workspace, providers }: { workspace: Workspace; provider
               </span>
             </div>
           )}
+          {workspace.domain && isRunning && (
+            <div className="flex items-center gap-2 mt-0.5">
+              <Globe className="h-3.5 w-3.5 shrink-0 text-primary/60" />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(workspace.domain);
+                  toast.success("Domain copied!");
+                }}
+                className="text-xs font-mono text-primary/80 hover:text-primary truncate transition-colors cursor-pointer underline decoration-dotted underline-offset-2"
+                title={workspace.domain}
+              >
+                {workspace.domain}
+              </button>
+            </div>
+          )}
         </div>
       </CardContent>
       <CardFooter className="flex gap-2 bg-secondary/30 p-4 border-t border-border/50">
+        {isLocalPending && (
+          <Button
+            size="sm"
+            className="h-9 flex-1 text-xs gap-2 bg-primary/80 text-primary-foreground hover:bg-primary/90"
+            onClick={() => setShowConnectDialog(true)}
+          >
+            <Terminal className="h-3.5 w-3.5" />
+            View Connect Command
+          </Button>
+        )}
         {isRunning && workspace.domain && (
-          workspace.serverOnly ? (
-            <Button 
-              size="sm" 
-              className="h-9 flex-1 text-xs gap-2 bg-primary/80 text-primary-foreground hover:bg-primary/90"
-              onClick={() => {
-                const command = `opencode attach https://${workspace.domain}`;
-                navigator.clipboard.writeText(command);
-                toast.success("Command copied to clipboard!");
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" />
-              Copy Attach Command
-            </Button>
+          isLocal ? (
+            <div className="flex gap-2 flex-1">
+              <Button 
+                size="sm" 
+                className="h-9 flex-1 text-xs gap-2 bg-primary/80 text-primary-foreground hover:bg-primary/90"
+                onClick={() => {
+                  const command = `opencode attach https://${workspace.domain}`;
+                  navigator.clipboard.writeText(command);
+                  toast.success("Attach command copied to clipboard!");
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy Attach
+              </Button>
+              <Button 
+                size="sm" 
+                className="h-9 flex-1 text-xs gap-2 bg-accent text-accent-foreground hover:bg-accent/90" 
+                asChild
+              >
+                <a href={`https://desktop.opencode.ai/?url=${workspace.domain}`} target="_blank" rel="noreferrer">
+                  <Monitor className="h-3.5 w-3.5" />
+                  Desktop App
+                </a>
+              </Button>
+            </div>
           ) : (
             <Button 
               size="sm" 
@@ -249,7 +360,7 @@ function InstanceCard({ workspace, providers }: { workspace: Workspace; provider
           </Button>
         )}
 
-        {(isPending || isRunning) && (
+        {(isPending || isRunning) && !isLocalPending && (
           <Button
             variant="outline"
             size="sm"
@@ -280,5 +391,6 @@ function InstanceCard({ workspace, providers }: { workspace: Workspace; provider
         </Button>
       </CardFooter>
     </Card>
+    </>
   );
 }
