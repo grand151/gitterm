@@ -115,7 +115,7 @@ export async function closeUsageSession(
   const [existingDailyUsage] = await db
     .select()
     .from(dailyUsage)
-    .where(and(eq(dailyUsage.userId, openSession.userId), eq(dailyUsage.date, today)));
+    .where(and(eq(dailyUsage.userId, openSession.userId!), eq(dailyUsage.date, today)));
 
   if (existingDailyUsage) {
     await db
