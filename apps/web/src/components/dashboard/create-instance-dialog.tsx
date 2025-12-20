@@ -504,7 +504,7 @@ export function CreateInstanceDialog() {
                         id="persistent"
                         checked={selectedPersistent}
                         onCheckedChange={(checked) => setSelectedPersistent(checked as boolean)}
-                        className="mt-0.5 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                        className="mt-0.5 data-[state=checked]:bg-primary data-[state=checked]:border-accent"
                       />
                       <div className="grid gap-1">
                         <Label htmlFor="persistent" className="text-sm font-medium cursor-pointer">
