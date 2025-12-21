@@ -81,34 +81,39 @@ export class Multiplexer {
 						reject(new Error("tunnel response timeout"));
 					}, timeoutMs);
 
+			const flushBufferedChunks = (entry: PendingStreamResponse) => {
+				if (!entry.controller) return;
+				if (entry.bufferedChunks.length === 0) return;
+
+				for (const buffered of entry.bufferedChunks) {
+					if (buffered.chunk.byteLength > 0) entry.controller.enqueue(buffered.chunk);
+					if (buffered.final) {
+						entry.controller.close();
+						if (entry.sseKey) this.activeSSE.delete(entry.sseKey);
+						this.pending.delete(id);
+						break;
+					}
+				}
+
+				entry.bufferedChunks = [];
+			};
+
+			let controllerFromStart: ReadableStreamDefaultController<Uint8Array> | undefined;
 			const stream = new ReadableStream<Uint8Array>({
 				start: (controller) => {
-					// IMPORTANT: `start()` timing is not guaranteed. We must be able to flush any
-					// chunks received before the controller was available.
+					// NOTE: In Bun, `start()` can run before we call `this.pending.set(...)`.
+					// Capture the controller so we can attach it after we create the entry.
+					controllerFromStart = controller;
+
 					const entry = this.pending.get(id);
 					if (!entry) return;
 					entry.controller = controller;
-
-					if (entry.bufferedChunks.length > 0) {
-						for (const buffered of entry.bufferedChunks) {
-							if (buffered.chunk.byteLength > 0) controller.enqueue(buffered.chunk);
-							if (buffered.final) {
-								controller.close();
-								if (entry.sseKey) this.activeSSE.delete(entry.sseKey);
-								this.pending.delete(id);
-								break;
-							}
-						}
-						entry.bufferedChunks = [];
-					}
+					flushBufferedChunks(entry);
 				},
 				cancel: () => {
 					const entry = this.pending.get(id);
 					if (entry?.onCancel) entry.onCancel();
-					// Clean up SSE tracking if this was an SSE connection
-					if (entry?.sseKey) {
-						this.activeSSE.delete(entry.sseKey);
-					}
+					if (entry?.sseKey) this.activeSSE.delete(entry.sseKey);
 					if (entry?.timer) clearTimeout(entry.timer);
 					this.pending.delete(id);
 				},
@@ -127,6 +132,11 @@ export class Multiplexer {
 			};
 
 			this.pending.set(id, entry);
+
+			if (controllerFromStart) {
+				entry.controller = controllerFromStart;
+				flushBufferedChunks(entry);
+			}
 		});
 	}
 
