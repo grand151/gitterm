@@ -23,14 +23,22 @@ function extractSubdomain(host: string): string {
 	return '';
 }
 
-// Load HTML error pages
-const ERROR_PAGE_UNAVAILABLE = readFileSync(join(__dirname, 'errors', 'unavailable.html'), 'utf-8');
-const ERROR_PAGE_SERVER_ERROR = readFileSync(join(__dirname, 'errors', 'error.html'), 'utf-8');
-const ERROR_PAGE_OFFLINE = readFileSync(join(__dirname, 'errors', 'offline.html'), 'utf-8');
+// Lazy-load HTML error pages to avoid loading files in apps that don't use this router
+let _errorPages: { unavailable: string; serverError: string; offline: string } | null = null;
+function getErrorPages() {
+	if (!_errorPages) {
+		_errorPages = {
+			unavailable: readFileSync(join(__dirname, 'errors', 'unavailable.html'), 'utf-8'),
+			serverError: readFileSync(join(__dirname, 'errors', 'error.html'), 'utf-8'),
+			offline: readFileSync(join(__dirname, 'errors', 'offline.html'), 'utf-8'),
+		};
+	}
+	return _errorPages;
+}
 
 // Helper to return HTML error responses
-function htmlError(c: Context, html: string, status: ContentfulStatusCode) {
-	return c.html(html, status);
+function htmlError(c: Context, type: 'unavailable' | 'serverError' | 'offline', status: ContentfulStatusCode) {
+	return c.html(getErrorPages()[type], status);
 }
 
 export const proxyResolverRouter = async (c: Context) => {
@@ -39,11 +47,11 @@ export const proxyResolverRouter = async (c: Context) => {
         const internalKey = c.req.header('X-Internal-Key') || '';
         if (!internalKey) {
 			console.log('[PROXY-RESOLVE] Missing internal key');
-            return htmlError(c, ERROR_PAGE_UNAVAILABLE, 401);
+            return htmlError(c, 'unavailable', 401);
         }
         if (internalKey !== process.env.INTERNAL_API_KEY) {
 			console.log('[PROXY-RESOLVE] Invalid internal key');
-            return htmlError(c, ERROR_PAGE_UNAVAILABLE, 401);
+            return htmlError(c, 'unavailable', 401);
         }
 		const host = c.req.header('Host') || '';
 		const subdomain = extractSubdomain(host);
@@ -52,7 +60,7 @@ export const proxyResolverRouter = async (c: Context) => {
 		
 		if (!subdomain) {
 			console.log('[PROXY-RESOLVE] No subdomain found');
-		  return htmlError(c, ERROR_PAGE_UNAVAILABLE, 400);
+		  return htmlError(c, 'unavailable', 400);
 		}
 	
 		// Get session from cookies
@@ -73,7 +81,7 @@ export const proxyResolverRouter = async (c: Context) => {
 	
 		if (!ws) {
             console.log('[PROXY-RESOLVE] Workspace not found for subdomain:', subdomain);
-		  return htmlError(c, ERROR_PAGE_UNAVAILABLE, 404);
+		  return htmlError(c, 'unavailable', 404);
 		}
 		
 		console.log('[PROXY-RESOLVE] Workspace found:', { 
@@ -102,11 +110,11 @@ export const proxyResolverRouter = async (c: Context) => {
 			// Non-server-only local tunnels require auth
 			if (!session) {
 				console.log('[PROXY-RESOLVE] Local tunnel requires auth - no session');
-				return htmlError(c, ERROR_PAGE_UNAVAILABLE, 401);
+				return htmlError(c, 'unavailable', 401);
 			}
 			if (ws.userId !== session.user?.id) {
 				console.log('[PROXY-RESOLVE] Local tunnel - user mismatch');
-				return htmlError(c, ERROR_PAGE_UNAVAILABLE, 403);
+				return htmlError(c, 'unavailable', 403);
 			}
 
 			console.log('[PROXY-RESOLVE] Local tunnel authorized:', { 
@@ -125,7 +133,7 @@ export const proxyResolverRouter = async (c: Context) => {
 		// Server-only workspaces skip auth
 		if (ws.serverOnly) {
 		  if (!ws.backendUrl) {
-			return htmlError(c, ERROR_PAGE_SERVER_ERROR, 500);
+			return htmlError(c, 'serverError', 500);
 		  }
           const backendUrl = new URL(ws.backendUrl);
 
@@ -138,15 +146,15 @@ export const proxyResolverRouter = async (c: Context) => {
 	
 		// Validate auth for non-server-only
 		if (!session) {
-		  return htmlError(c, ERROR_PAGE_UNAVAILABLE, 401);
+		  return htmlError(c, 'unavailable', 401);
 		}
 	
 		if (ws.userId !== session.user?.id) {
-		  return htmlError(c, ERROR_PAGE_UNAVAILABLE, 403);
+		  return htmlError(c, 'unavailable', 403);
 		}
 	
 		if (!ws.backendUrl) {
-		  return htmlError(c, ERROR_PAGE_SERVER_ERROR, 500);
+		  return htmlError(c, 'serverError', 500);
 		}
 	
         const backendUrl = new URL(ws.backendUrl);
@@ -160,6 +168,6 @@ export const proxyResolverRouter = async (c: Context) => {
 		
 	  } catch (error) {
 		console.error('Auth resolve error:', error);
-		return htmlError(c, ERROR_PAGE_SERVER_ERROR, 500);
+		return htmlError(c, 'serverError', 500);
 	  }
 }
