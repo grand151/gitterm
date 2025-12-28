@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy root package files for workspace resolution
 COPY package.json bun.lock ./
 COPY packages ./packages
-COPY apps/tunnel-proxy ./apps/tunnel-proxy
+COPY apps ./apps
 
 # Install dependencies
 RUN bun install --frozen-lockfile

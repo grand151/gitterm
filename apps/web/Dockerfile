@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy root package files for workspace resolution
 COPY package.json bun.lock ./
 COPY packages ./packages
-COPY apps/web ./apps/web
+COPY apps ./apps
 
 # Install dependencies
 RUN bun install --frozen-lockfile

@@ -6,7 +6,7 @@ WORKDIR /app
 # Copy root package files for workspace resolution
 COPY package.json bun.lock ./
 COPY packages ./packages
-COPY apps/server ./apps/server
+COPY apps ./apps
 
 # Install dependencies
 RUN bun install --frozen-lockfile
@@ -15,24 +15,27 @@ RUN bun install --frozen-lockfile
 WORKDIR /app/apps/server
 RUN bun run build
 
+# Build standalone migration and seed scripts
+RUN bun build scripts/migrate.ts --outfile dist/migrate.mjs --target bun
+RUN bun build scripts/seed.ts --outfile dist/seed.mjs --target bun
+
 # Production stage
 FROM oven/bun:1.3-slim AS runner
 
 WORKDIR /app
 
-# Copy built output and production dependencies
+# Copy built output
 COPY --from=builder /app/apps/server/dist ./dist
-COPY --from=builder /app/apps/server/package.json ./
 
-# Copy database migrations for self-hosted bootstrap
-# These are only used when DEPLOYMENT_MODE=self-hosted
+# Copy database migrations
 COPY --from=builder /app/packages/db/src/migrations ./migrations
 
-# Install only production dependencies
-RUN bun install --production --frozen-lockfile || true
+# Copy entrypoint script
+COPY --from=builder /app/apps/server/docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 # Expose port (configurable via PORT env)
 EXPOSE 3000
 
-# Run the app
-CMD ["bun", "run", "dist/index.mjs"]
+# Use entrypoint for database bootstrap
+ENTRYPOINT ["./docker-entrypoint.sh"]
