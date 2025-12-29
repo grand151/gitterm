@@ -9,12 +9,12 @@
     ],
     "catalog": {
       "hono": "^4.8.2",
-      "@trpc/server": "^11.5.0",
+      "@trpc/server": "^11.8.1",
       "better-auth": "^1.4.9",
       "dotenv": "^17.2.2",
       "zod": "^4.1.11",
       "typescript": "^5.8.2",
-      "@trpc/client": "^11.5.0"
+      "@trpc/client": "^11.8.1"
     }
   },
   "scripts": {
@@ -45,6 +45,8 @@
     "redis:down": "turbo -F @gitterm/redis redis:down"
   },
   "dependencies": {
+    "@trpc/client": "^11.8.1",
+    "@trpc/server": "^11.8.1",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.2",
     "zod": "^4.1.11"

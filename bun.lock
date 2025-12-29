@@ -5,6 +5,8 @@
     "": {
       "name": "gitterm",
       "dependencies": {
+        "@trpc/client": "^11.8.1",
+        "@trpc/server": "^11.8.1",
         "date-fns": "^4.1.0",
         "dotenv": "^17.2.2",
         "zod": "^4.1.11",

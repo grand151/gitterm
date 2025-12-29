@@ -22,6 +22,7 @@ WORKDIR /app
 # Copy root package files and node_modules
 COPY --from=builder /app/package.json /app/bun.lock ./
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/turbo.json ./turbo.json
 
 # Copy only packages needed for db scripts (auth, db, env, config)
 COPY --from=builder /app/packages/db ./packages/db
