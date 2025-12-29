@@ -53,6 +53,10 @@
 			"cache": false,
 			"persistent": true
 		},
+		"db:seed-admin": {
+			"cache": false,
+			"persistent": true
+		},
 		"redis:start": {
 			"cache": false,
 			"persistent": true

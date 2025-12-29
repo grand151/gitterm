@@ -1,6 +1,5 @@
 import { db, eq } from "./index";
 import { agentType, cloudProvider, image, region } from "./schema/cloud";
-import { runMigrations } from "./migrate";
 
 /**
  * Seed data definitions
@@ -155,41 +154,4 @@ export async function seedDatabase(): Promise<void> {
     }
 
     console.log("[seed] Database seed completed");
-}
-
-/**
- * Bootstrap the database: run migrations and seed
- * This is the main function to call on server startup for Railway templates
- * 
- * @param databaseUrl - PostgreSQL connection string
- * @param options - Bootstrap options
- */
-export async function bootstrapDatabase(
-    databaseUrl: string,
-    options: {
-        runMigrations?: boolean;
-        runSeed?: boolean;
-    } = {}
-): Promise<{ success: boolean; error?: Error }> {
-    const { runMigrations: shouldMigrate = true, runSeed = true } = options;
-
-    try {
-        // Run migrations first
-        if (shouldMigrate) {
-            const migrationResult = await runMigrations(databaseUrl);
-            if (!migrationResult.success) {
-                return migrationResult;
-            }
-        }
-
-        // Then seed the database
-        if (runSeed) {
-            await seedDatabase();
-        }
-
-        return { success: true };
-    } catch (error) {
-        console.error("[bootstrap] Database bootstrap failed:", error);
-        return { success: false, error: error as Error };
-    }
 }

@@ -4,6 +4,7 @@
  * Run with: bun run packages/db/src/seed-cli.ts
  */
 
+import "dotenv/config";
 import { seedDatabase } from "./seed";
 
 const databaseUrl = process.env.DATABASE_URL;

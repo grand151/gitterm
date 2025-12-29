@@ -235,6 +235,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@gitterm/auth": "workspace:*",
         "@gitterm/config": "workspace:*",
         "@types/pg": "^8.11.11",
         "drizzle-kit": "^0.31.2",
