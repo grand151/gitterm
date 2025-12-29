@@ -24,8 +24,7 @@
   "devDependencies": {
     "drizzle-kit": "^0.31.2",
     "@types/pg": "^8.11.11",
-    "@gitterm/config": "workspace:*",
-    "@gitterm/auth": "workspace:*"
+    "@gitterm/config": "workspace:*"
   },
   "peerDependencies": {
     "typescript": "^5"
