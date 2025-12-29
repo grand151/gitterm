@@ -1,13 +1,22 @@
 #!/usr/bin/env bun
 /**
- * Standalone seed script for Docker entrypoint
+ * Standalone seed script for Railway pre-deploy
  * Uses postgres package (bun native) for minimal dependencies
+ * 
+ * Environment variables:
+ *   DATABASE_URL - Required: PostgreSQL connection string
+ *   ADMIN_EMAIL - Optional: Admin user email
+ *   ADMIN_PASSWORD - Optional: Admin user password
  */
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
 import { pgTable, text, boolean, timestamp, uuid } from "drizzle-orm/pg-core";
 import postgres from "postgres";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
+
+const scryptAsync = promisify(scrypt);
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -18,7 +27,10 @@ if (!databaseUrl) {
 const sql = postgres(databaseUrl, { max: 1 });
 const db = drizzle(sql);
 
-// Define tables inline to avoid importing from @gitterm/db
+// ============================================================================
+// Table Definitions (inline to avoid workspace imports)
+// ============================================================================
+
 const cloudProvider = pgTable("cloud_provider", {
     id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull().unique(),
@@ -57,7 +69,48 @@ const region = pgTable("region", {
     updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Seed data
+// better-auth user table
+const user = pgTable("user", {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
+    role: text("role").default("user"),
+    plan: text("plan").default("free"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// better-auth account table (for password storage)
+const account = pgTable("account", {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id").notNull().references(() => user.id),
+    password: text("password"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ============================================================================
+// Password Hashing (compatible with better-auth's scrypt format)
+// ============================================================================
+
+async function hashPassword(password: string): Promise<string> {
+    const salt = randomBytes(16).toString("hex");
+    const derivedKey = await scryptAsync(password, salt, 64) as Buffer;
+    return `${salt}:${derivedKey.toString("hex")}`;
+}
+
+function generateId(): string {
+    return randomBytes(16).toString("hex");
+}
+
+// ============================================================================
+// Seed Data
+// ============================================================================
+
 const seedCloudProviders = [
     { name: "Railway" },
     { name: "AWS" },
@@ -84,8 +137,70 @@ const seedRegions = [
     { name: "Local", location: "Local Machine", externalRegionIdentifier: "local", providerName: "Local" },
 ];
 
-try {
-    console.log("[seed] Starting database seed...");
+// ============================================================================
+// Seed Functions
+// ============================================================================
+
+async function seedAdminUser(): Promise<void> {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminEmail || !adminPassword) {
+        console.log("[seed] No ADMIN_EMAIL/ADMIN_PASSWORD set, skipping admin user creation");
+        return;
+    }
+
+    console.log("[seed] Seeding admin user...");
+
+    // Check if user already exists
+    const existing = await db.select().from(user).where(eq(user.email, adminEmail)).limit(1);
+
+    if (existing.length > 0) {
+        const existingUser = existing[0]!;
+        // Ensure they have admin role
+        if (existingUser.role !== "admin") {
+            await db
+                .update(user)
+                .set({ role: "admin", updatedAt: new Date() })
+                .where(eq(user.id, existingUser.id));
+            console.log(`[seed]   Upgraded existing user "${adminEmail}" to admin role`);
+        } else {
+            console.log(`[seed]   Admin user "${adminEmail}" already exists`);
+        }
+        return;
+    }
+
+    // Create new admin user
+    const userId = generateId();
+    const accountId = generateId();
+    const hashedPassword = await hashPassword(adminPassword);
+    const now = new Date();
+
+    await db.insert(user).values({
+        id: userId,
+        name: "Admin",
+        email: adminEmail,
+        emailVerified: true,
+        role: "admin",
+        plan: "pro",
+        createdAt: now,
+        updatedAt: now,
+    });
+
+    await db.insert(account).values({
+        id: accountId,
+        accountId: userId,
+        providerId: "credential",
+        userId: userId,
+        password: hashedPassword,
+        createdAt: now,
+        updatedAt: now,
+    });
+
+    console.log(`[seed]   Created admin user "${adminEmail}"`);
+}
+
+async function seedCloudProvidersAndRegions(): Promise<void> {
     const providerMap = new Map<string, string>();
     const agentTypeMap = new Map<string, string>();
 
@@ -156,6 +271,17 @@ try {
             console.log(`[seed]   Created region "${reg.name}"`);
         }
     }
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+try {
+    console.log("[seed] Starting database seed...");
+
+    await seedCloudProvidersAndRegions();
+    await seedAdminUser();
 
     console.log("[seed] Database seed completed");
     await sql.end();
