@@ -13,6 +13,16 @@ RUN bun install --frozen-lockfile
 
 # Build the Next.js app
 WORKDIR /app/apps/web
+
+# Set build-time environment variables
+# These are inlined during build for NEXT_PUBLIC_* vars
+# Runtime values should match these or be set via Railway
+ENV NODE_ENV=production
+ENV NEXT_PUBLIC_BASE_DOMAIN=placeholder.dev
+ENV NEXT_PUBLIC_ROUTING_MODE=subdomain
+ENV NEXT_PUBLIC_ENABLE_BILLING=false
+ENV NEXT_TELEMETRY_DISABLED=1
+
 RUN bun run build
 
 # Production stage

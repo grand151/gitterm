@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 /**
  * Standalone seed script for Docker entrypoint
- * Run with: bun run seed.mjs
+ * Uses postgres package (bun native) for minimal dependencies
  */
 
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
-import { Pool } from "pg";
-import { agentType, cloudProvider, image, region } from "@gitterm/db/schema/cloud";
+import { pgTable, text, boolean, timestamp, uuid } from "drizzle-orm/pg-core";
+import postgres from "postgres";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -15,12 +15,47 @@ if (!databaseUrl) {
     process.exit(1);
 }
 
-const pool = new Pool({
-    connectionString: databaseUrl,
-    max: 1,
+const sql = postgres(databaseUrl, { max: 1 });
+const db = drizzle(sql);
+
+// Define tables inline to avoid importing from @gitterm/db
+const cloudProvider = pgTable("cloud_provider", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull().unique(),
+    isEnabled: boolean("is_enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-const db = drizzle(pool);
+const agentType = pgTable("agent_type", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull().unique(),
+    serverOnly: boolean("server_only").default(false),
+    isEnabled: boolean("is_enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+const image = pgTable("image", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull().unique(),
+    imageId: text("image_id").notNull(),
+    agentTypeId: uuid("agent_type_id").references(() => agentType.id),
+    isEnabled: boolean("is_enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+const region = pgTable("region", {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    location: text("location"),
+    externalRegionIdentifier: text("external_region_identifier").notNull().unique(),
+    cloudProviderId: uuid("cloud_provider_id").references(() => cloudProvider.id),
+    isEnabled: boolean("is_enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+});
 
 // Seed data
 const seedCloudProviders = [
@@ -123,10 +158,10 @@ try {
     }
 
     console.log("[seed] Database seed completed");
+    await sql.end();
     process.exit(0);
 } catch (error) {
     console.error("[seed] Seed failed:", error);
+    await sql.end();
     process.exit(1);
-} finally {
-    await pool.end();
 }

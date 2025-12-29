@@ -15,16 +15,16 @@ RUN bun install --frozen-lockfile
 WORKDIR /app/apps/server
 RUN bun run build
 
-# Build standalone migration and seed scripts
-RUN bun build scripts/migrate.ts --outfile dist/migrate.mjs --target bun
-RUN bun build scripts/seed.ts --outfile dist/seed.mjs --target bun
+# Build standalone migration and seed scripts (bundle all dependencies)
+RUN bun build scripts/migrate.ts --outfile dist/migrate.mjs --target bun --minify
+RUN bun build scripts/seed.ts --outfile dist/seed.mjs --target bun --minify
 
 # Production stage
 FROM oven/bun:1.3-slim AS runner
 
 WORKDIR /app
 
-# Copy built output
+# Copy built output only (no node_modules needed - scripts are bundled)
 COPY --from=builder /app/apps/server/dist ./dist
 
 # Copy database migrations

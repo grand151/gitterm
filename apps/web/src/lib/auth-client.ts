@@ -1,13 +1,21 @@
-import type { auth } from "@gitterm/auth";
 import { createAuthClient } from "better-auth/react";
 import { inferAdditionalFields } from "better-auth/client/plugins";
 import { polarClient } from '@polar-sh/better-auth/client'
 import env from "@gitterm/env/web";
 
+// Define the additional fields type inline to avoid importing @gitterm/auth
+// which has server-side database dependencies
+type AuthAdditionalFields = {
+  user: {
+    plan: "free" | "tunnel" | "pro";
+    role: "user" | "admin";
+  };
+};
+
 const isBillingEnabled = env.NEXT_PUBLIC_ENABLE_BILLING;
 const authBaseUrl =
   env.NEXT_PUBLIC_AUTH_URL ??
-  (env.NEXT_PUBLIC_SERVER_URL ? `${env.NEXT_PUBLIC_SERVER_URL}/auth` : undefined);
+  (env.NEXT_PUBLIC_SERVER_URL ? `${env.NEXT_PUBLIC_SERVER_URL}/api/auth` : undefined);
 
 /**
  * Auth client for non-billing mode
@@ -16,7 +24,7 @@ const authBaseUrl =
 const createStandardAuthClient = () =>
   createAuthClient({
     baseURL: authBaseUrl,
-    plugins: [inferAdditionalFields<typeof auth>()],
+    plugins: [inferAdditionalFields<AuthAdditionalFields>()],
   });
 
 /**
@@ -32,7 +40,7 @@ const createStandardAuthClient = () =>
 const createBillingAuthClient = () =>
   createAuthClient({
     baseURL: authBaseUrl,
-    plugins: [inferAdditionalFields<typeof auth>(), polarClient()],
+    plugins: [inferAdditionalFields<AuthAdditionalFields>(), polarClient()],
   });
 
 // Export the appropriate client based on billing status
