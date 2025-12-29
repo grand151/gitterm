@@ -1,7 +1,13 @@
 import { TunnelRepository } from "@gitterm/redis";
-import { internalClient } from "./internal-client";
+import { createInternalClient } from "@gitterm/api/client";
 import { Multiplexer } from "./mux";
 import env from "@gitterm/env/tunnel-proxy";
+
+// Create internal client for service-to-service communication
+const internalClient = createInternalClient(
+	env.SERVER_URL || "http://localhost:3000",
+	env.INTERNAL_API_KEY || ""
+);
 
 export interface ConnectedAgent {
 	subdomain: string;

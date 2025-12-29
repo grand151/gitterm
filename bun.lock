@@ -76,8 +76,6 @@
         "@gitterm/api": "workspace:*",
         "@gitterm/env": "workspace:*",
         "@gitterm/redis": "workspace:*",
-        "@trpc/client": "catalog:",
-        "@trpc/server": "catalog:",
         "dotenv": "catalog:",
         "hono": "catalog:",
         "jsonwebtoken": "^9.0.2",
@@ -146,8 +144,6 @@
       "name": "worker",
       "dependencies": {
         "@gitterm/api": "workspace:*",
-        "@trpc/client": "catalog:",
-        "@trpc/server": "catalog:",
         "dotenv": "catalog:",
       },
       "devDependencies": {
@@ -278,8 +274,8 @@
     },
   },
   "catalog": {
-    "@trpc/client": "^11.5.0",
-    "@trpc/server": "^11.5.0",
+    "@trpc/client": "^11.8.1",
+    "@trpc/server": "^11.8.1",
     "better-auth": "^1.4.9",
     "dotenv": "^17.2.2",
     "hono": "^4.8.2",

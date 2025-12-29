@@ -11,9 +11,7 @@
   },
   "dependencies": {
     "dotenv": "catalog:",
-    "@gitterm/api": "workspace:*",
-    "@trpc/client": "catalog:",
-    "@trpc/server": "catalog:"
+    "@gitterm/api": "workspace:*"
   },
   "devDependencies": {
     "typescript": "catalog:",

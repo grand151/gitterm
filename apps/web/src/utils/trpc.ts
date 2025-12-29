@@ -4,7 +4,6 @@ import {
 	createTRPCProxyClient,
 	httpBatchLink,
 	httpSubscriptionLink,
-	splitLink,
 } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import type { AppRouter, ListenerRouter } from "@gitterm/api/routers/index";
