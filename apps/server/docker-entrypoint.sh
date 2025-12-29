@@ -9,8 +9,8 @@ echo "[entrypoint] Running seed..."
 bun run db:seed
 
 echo "[entrypoint] Running admin seed..."
+cd /app/apps/server
 bun run db:seed-admin
 
 echo "[entrypoint] Starting server..."
-cd /app/apps/server
 exec bun run dist/index.mjs

@@ -15,8 +15,8 @@
 
 import "dotenv/config";
 import { auth } from "@gitterm/auth";
-import { db, eq } from "./index";
-import * as schema from "./schema/auth";
+import { db, eq } from "@gitterm/db";
+import * as schema from "@gitterm/db/schema/auth";
 
 const adminEmail = process.env.ADMIN_EMAIL;
 const adminPassword = process.env.ADMIN_PASSWORD;

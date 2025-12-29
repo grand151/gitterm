@@ -32,6 +32,7 @@ COPY --from=builder /app/packages/config ./packages/config
 
 # Copy built server output
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
+COPY --from=builder /app/apps/server/scripts ./apps/server/scripts
 COPY --from=builder /app/apps/server/package.json ./apps/server/package.json
 
 # Copy entrypoint script
@@ -42,12 +43,7 @@ RUN chmod +x docker-entrypoint.sh
 EXPOSE 8080
 
 # ============================================================================
-# Railway Pre-deploy commands:
-#
-#   cd /app/packages/db && bun run db:migrate
-#   cd /app/packages/db && bun run db:seed
-#   cd /app/packages/db && bun run db:seed-admin
-#
+# Migrations, seeding, and admin setup run in docker-entrypoint.sh
 # ============================================================================
 
 # Use entrypoint to start the server
