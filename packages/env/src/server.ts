@@ -85,6 +85,7 @@ const baseSchema = z.object({
   ENABLE_USAGE_METERING: boolWithDefault(false),
   ENABLE_LOCAL_TUNNELS: boolWithDefault(true),
   ENABLE_EMAIL_AUTH: boolWithDefault(true),
+  ENABLE_GITHUB_AUTH: boolWithDefault(false),
 // ... keep the z.object({ ... }) as-is ...
 }).superRefine((data, ctx) => {
   const errors: { path: string; message: string }[] = [];
@@ -102,6 +103,16 @@ const baseSchema = z.object({
     }
     if (!data.POLAR_PRO_PRODUCT_ID) {
       errors.push({ path: "POLAR_PRO_PRODUCT_ID", message: "POLAR_PRO_PRODUCT_ID is required in managed mode" });
+    }
+  }
+
+  // GitHub auth requires GitHub OAuth credentials
+  if (data.ENABLE_GITHUB_AUTH) {
+    if (!data.GITHUB_CLIENT_ID) {
+      errors.push({ path: "GITHUB_CLIENT_ID", message: "GITHUB_CLIENT_ID is required when ENABLE_GITHUB_AUTH is true" });
+    }
+    if (!data.GITHUB_CLIENT_SECRET) {
+      errors.push({ path: "GITHUB_CLIENT_SECRET", message: "GITHUB_CLIENT_SECRET is required when ENABLE_GITHUB_AUTH is true" });
     }
   }
 
@@ -148,7 +159,7 @@ export default env;
 export const isManaged = () => env.DEPLOYMENT_MODE === "managed";
 export const isSelfHosted = () => env.DEPLOYMENT_MODE === "self-hosted";
 export const isBillingEnabled = () => isManaged() && !!env.POLAR_ACCESS_TOKEN;
-export const isGitHubAuthEnabled = () => !!env.GITHUB_CLIENT_ID;
+export const isGitHubAuthEnabled = () => env.ENABLE_GITHUB_AUTH;
 export const isEmailAuthEnabled = () => env.ENABLE_EMAIL_AUTH;
 export const isSubdomainRouting = () => env.ROUTING_MODE === "subdomain";
 export const isPathRouting = () => env.ROUTING_MODE === "path";

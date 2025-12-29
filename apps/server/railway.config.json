@@ -17,7 +17,7 @@
     ]
   },
   "deploy": {
-    "startCommand": "cd apps/server && bun run dist/index.mjs",
+    "startCommand": "cd apps/server && bun run dist/src/index.mjs",
     "healthcheckPath": "/",
     "healthcheckTimeout": 100,
     "restartPolicyType": "never"
