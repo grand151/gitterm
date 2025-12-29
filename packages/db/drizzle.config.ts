@@ -1,16 +1,24 @@
+import { existsSync } from "node:fs";
 import { defineConfig } from "drizzle-kit";
-import dotenv from "dotenv";
 
-// Load from server .env in development, but in production DATABASE_URL should be set directly
-dotenv.config({
-	path: "../../apps/server/.env",
-});
+// Load from server .env in development only if file exists and DATABASE_URL is not already set
+if (!process.env.DATABASE_URL) {
+	const envPath = "../../apps/server/.env";
+	if (existsSync(envPath)) {
+		const dotenv = await import("dotenv");
+		dotenv.config({ path: envPath });
+	}
+}
+
+if (!process.env.DATABASE_URL) {
+	throw new Error("DATABASE_URL environment variable is required");
+}
 
 export default defineConfig({
 	schema: "./src/schema",
 	out: "./src/migrations",
 	dialect: "postgresql",
 	dbCredentials: {
-		url: process.env.DATABASE_URL || "",
+		url: process.env.DATABASE_URL,
 	},
 });
