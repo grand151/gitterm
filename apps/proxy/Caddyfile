@@ -20,8 +20,7 @@
 # - Caddyfile.local     : Local development
 #
 # Subdomain Format Support:
-# - ws-<uuid>.gitterm.dev      : Cloud workspaces (auto-generated)
-# - local-<name>.gitterm.dev   : Free tier local tunnels
+# - ws-<uuid>.gitterm.dev      : Cloud & Local workspaces (auto-generated)
 # - <custom-name>.gitterm.dev  : Paid tier custom subdomains
 # - Reserved (blocked):         api, tunnel, www, admin, etc.
 
