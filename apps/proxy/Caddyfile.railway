@@ -56,7 +56,10 @@
 	# ============================================
 	handle /api/trpc/* {
 		uri strip_prefix /api
-		reverse_proxy {$SERVER_URL}
+		reverse_proxy {$SERVER_URL} {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+		}
 	}
 
 	# ============================================
@@ -64,7 +67,10 @@
 	# Keep /api prefix (server expects it for auth, device, agent routes)
 	# ============================================
 	handle /api/* {
-		reverse_proxy {$SERVER_URL}
+		reverse_proxy {$SERVER_URL} {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+		}
 	}
 
 	# ============================================
