@@ -44,13 +44,22 @@
 		respond `{"status":"UP","mode":"railway"}` 200
 	}
 
+	# Debug endpoint - shows env var values (remove in production)
+	handle /debug {
+		header Content-Type application/json
+		respond `{"WEB_URL":"{$WEB_URL}","SERVER_URL":"{$SERVER_URL}","LISTENER_URL":"{$LISTENER_URL}","TUNNEL_PROXY_URL":"{$TUNNEL_PROXY_URL}"}` 200
+	}
+
 	# ============================================
 	# tRPC: /api/trpc/* -> SERVER_URL/trpc/*
 	# Strip /api prefix, keep /trpc
 	# ============================================
 	handle /api/trpc/* {
 		uri strip_prefix /api
-		reverse_proxy {$SERVER_URL}
+		reverse_proxy {$SERVER_URL} {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+		}
 	}
 
 	# ============================================
@@ -58,7 +67,10 @@
 	# Keep /api prefix (server expects it for auth, device, agent routes)
 	# ============================================
 	handle /api/* {
-		reverse_proxy {$SERVER_URL}
+		reverse_proxy {$SERVER_URL} {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+		}
 	}
 
 	# ============================================
