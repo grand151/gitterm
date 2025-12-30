@@ -12,11 +12,11 @@ Currently supports: **OpenCode**.
 
 GitTerm gives you flexible ways to run AI coding agents:
 
-1. **Cloud Workspaces** - Spin up cloud-based environments where your agent runs remotely. Access via browser at `https://your-domain.com/ws/{workspace-id}/`
+1. **Cloud Workspaces** - Spin up cloud-based environments where your agent runs remotely. Access via browser or API.
 
-2. **Local Tunnels** - Run your agent locally, then expose it through a secure tunnel. Your local server becomes accessible at `https://your-domain.com/ws/{workspace-id}/`
+2. **Local Tunnels** - Run your agent locally, then expose it through a secure tunnel.
 
-Both modes work with supported agents (currently OpenCode). Cloud workspaces handle heavy computation remotely, while local tunnels give you full control over your local setup.
+Both modes work with supported agents (currently OpenCode). Cloud workspaces handle heavy computation remotely, while local tunnels give you full control over your local setup, from any location. Both ways are secured meaning no unauthenticated access to your workspaces.
 
 ![GitTerm Dashboard](./media/dashboard.png)
 
