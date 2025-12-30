@@ -18,6 +18,8 @@ GitTerm gives you flexible ways to run AI coding agents:
 
 Both modes work with supported agents (currently OpenCode). Cloud workspaces handle heavy computation remotely, while local tunnels give you full control over your local setup.
 
+![GitTerm Dashboard](./media/dashboard.png)
+
 ## Self-Hosting Guide
 
 ### Deploy on Railway (Recommended)
