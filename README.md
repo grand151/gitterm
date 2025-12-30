@@ -12,9 +12,9 @@ Currently supports: **OpenCode**.
 
 GitTerm gives you flexible ways to run AI coding agents:
 
-1. **Cloud Workspaces** - Spin up cloud-based environments where your agent runs remotely. Access via browser at `https://agent.your-domain.com`
+1. **Cloud Workspaces** - Spin up cloud-based environments where your agent runs remotely. Access via browser at `https://your-domain.com/ws/{workspace-id}/`
 
-2. **Local Tunnels** - Run your agent locally, then expose it through a secure tunnel. Your local server becomes accessible at `https://your-domain.com/ws/agent-id/`
+2. **Local Tunnels** - Run your agent locally, then expose it through a secure tunnel. Your local server becomes accessible at `https://your-domain.com/ws/{workspace-id}/`
 
 Both modes work with supported agents (currently OpenCode). Cloud workspaces handle heavy computation remotely, while local tunnels give you full control over your local setup.
 
@@ -35,7 +35,7 @@ Caddy handles all routing through a single domain.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Caddy Proxy                                │
-│         (Path-based: /ws/{agent-id}/ → Tunnel Proxy)           │
+│        (Path-based: /ws/{workspace-id}/ → workspaces)          │
 └──────────────┬────────────────────────────┬─────────────────────┘
                │                            │
                ▼                            ▼
@@ -61,10 +61,7 @@ Caddy handles all routing through a single domain.
 
 **Self-hosted URL format:**
 ```
-# Cloud workspaces (agent runs in cloud)
-https://your-domain.com/agent/{workspace-id}/
-
-# Local tunnels (agent runs locally, tunneled to internet)
+# All workspaces use /ws/ path routing
 https://your-domain.com/ws/{workspace-id}/
 ```
 
