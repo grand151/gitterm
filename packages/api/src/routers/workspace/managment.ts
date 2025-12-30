@@ -899,7 +899,10 @@ export const workspaceRouter = router({
       z.object({
         name: z.string().optional(),
         repo: z.string().optional(), // Optional for local workspaces
-        subdomain: z.string().max(63).regex(/^[a-z0-9-]+$/).optional(), // Optional for custom subdomains
+        subdomain: z.union([
+          z.string().min(1).max(63).regex(/^[a-z0-9-]+$/),
+          z.literal("")
+        ]).optional(),        
         agentTypeId: z.string(),
         cloudProviderId: z.string(),
         regionId: z.string(),

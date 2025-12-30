@@ -49,8 +49,8 @@ export function CreateInstanceDialog() {
   const [open, setOpen] = useState(false);
   const [workspaceType, setWorkspaceType] = useState<"cloud" | "local">("cloud");
   const [repoUrl, setRepoUrl] = useState("");
-  const [localSubdomain, setLocalSubdomain] = useState("");
-  const [cloudSubdomain, setCloudSubdomain] = useState("");
+  const [localSubdomain, setLocalSubdomain] = useState<string | undefined>(undefined);
+  const [cloudSubdomain, setCloudSubdomain] = useState<string | undefined>(undefined);
   const [localName, setLocalName] = useState("");
   const [cliCommand, setCliCommand] = useState<string | null>(null);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState<string>("");
