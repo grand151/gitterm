@@ -356,11 +356,20 @@ async function runConnect(rawArgs: string[]) {
 	if (!token) {
 		if (!workspaceId) throw new Error("Missing --workspace-id");
 		let config = await loadConfig();
-		const effectiveServerUrl = config?.serverUrl || serverUrl;
+		// CLI flag takes precedence over saved config
+		const effectiveServerUrl = serverUrl;
 		
-		// Auto-login if no saved credentials
-		if (!config?.agentToken) {
-			console.log("No saved credentials found. Starting login...");
+		// Auto-login if no saved credentials OR connecting to a different server
+		const savedServerUrl = config?.serverUrl ? new URL(config.serverUrl).origin : null;
+		const targetServerUrl = new URL(effectiveServerUrl).origin;
+		const isDifferentServer = savedServerUrl && savedServerUrl !== targetServerUrl;
+		
+		if (!config?.agentToken || isDifferentServer) {
+			if (isDifferentServer) {
+				console.log(`Switching to ${targetServerUrl}. Starting login...`);
+			} else {
+				console.log("No saved credentials found. Starting login...");
+			}
 			const { agentToken } = await loginViaDeviceCode(effectiveServerUrl);
 			config = { serverUrl: effectiveServerUrl, agentToken, createdAt: Date.now() };
 			await saveConfig(config);
