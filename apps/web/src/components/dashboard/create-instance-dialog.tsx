@@ -64,6 +64,8 @@ export function CreateInstanceDialog() {
   const { data: installationsData } = useQuery(trpc.workspace.listUserInstallations.queryOptions());
   const { data: subdomainPermissions } = useQuery(trpc.workspace.getSubdomainPermissions.queryOptions());
 
+  console.log(subdomainPermissions?.canUseCustomSubdomain);
+
   const localProvider = useMemo(() => {
     return cloudProvidersData?.cloudProviders?.find(
       (cloud) => cloud.name.toLowerCase() === "local"
@@ -177,10 +179,6 @@ export function CreateInstanceDialog() {
 
   const handleSubmit = async () => {
     if (workspaceType === "local") {
-      if (!localSubdomain) {
-        toast.error("Please enter a subdomain.");
-        return;
-      }
       if (!selectedAgentTypeId) {
         toast.error("Please select an agent type.");
         return;
@@ -385,6 +383,7 @@ export function CreateInstanceDialog() {
                         value={cloudSubdomain}
                         onChange={(e) => setCloudSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
                         className="bg-secondary/30 border-border/50 focus:border-accent"
+                        disabled={!subdomainPermissions?.canUseCustomSubdomain}
                       />
                       <p className="text-xs text-muted-foreground">
                         {cloudSubdomain 
