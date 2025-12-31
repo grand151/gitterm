@@ -1,18 +1,85 @@
 name: Build and Push Docker Images
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'apps/web/**'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  # Version bump and tag creation
+  version-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.new_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get latest version tag
+        id: get_version
+        run: |
+          # Get the latest version tag, or default to v0.0.0
+          LATEST_TAG=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_VERSION=${LATEST_TAG#v}  # Remove 'v' prefix
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Latest version: $LATEST_VERSION"
+      
+      - name: Bump version
+        id: version
+        run: |
+          OLD_VERSION="${{ steps.get_version.outputs.latest_version }}"
+          VERSION_TYPE="${{ github.event.inputs.version_type }}"
+          
+          # Parse version components
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$OLD_VERSION"
+          
+          # Bump based on type
+          case "$VERSION_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumping $OLD_VERSION -> $NEW_VERSION ($VERSION_TYPE)"
+
+      - name: Create git tag
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+
   # Build API Server
   build-server:
+    needs: version-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -49,13 +116,15 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.image.outputs.prefix }}-server:latest
-            ${{ steps.image.outputs.prefix }}-server:${{ steps.image.outputs.short }}
+            ghcr.io/${{ steps.image.outputs.prefix }}-server:latest
+            ghcr.io/${{ steps.image.outputs.prefix }}-server:v${{ needs.version-release.outputs.version }}
+            ghcr.io/${{ steps.image.outputs.prefix }}-server:${{ github.sha }}
           cache-from: type=gha,scope=server
           cache-to: type=gha,mode=max,scope=server
 
-  # Build Listener (WebSocket subscription server)
+  # Build Listener (Webhook listener for workspace events)
   build-listener:
+    needs: version-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -93,12 +162,14 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.prefix }}-listener:latest
+            ${{ steps.image.outputs.prefix }}-listener:v${{ needs.version-release.outputs.version }}
             ${{ steps.image.outputs.prefix }}-listener:${{ steps.image.outputs.short }}
           cache-from: type=gha,scope=listener
           cache-to: type=gha,mode=max,scope=listener
 
   # Build Tunnel Proxy
   build-tunnel-proxy:
+    needs: version-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -136,12 +207,14 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.prefix }}-tunnel-proxy:latest
+            ${{ steps.image.outputs.prefix }}-tunnel-proxy:v${{ needs.version-release.outputs.version }}
             ${{ steps.image.outputs.prefix }}-tunnel-proxy:${{ steps.image.outputs.short }}
           cache-from: type=gha,scope=tunnel-proxy
           cache-to: type=gha,mode=max,scope=tunnel-proxy
 
   # Build Idle Reaper Worker
   build-idle-reaper-worker:
+    needs: version-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -179,12 +252,14 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.prefix }}-idle-reaper-worker:latest
+            ${{ steps.image.outputs.prefix }}-idle-reaper-worker:v${{ needs.version-release.outputs.version }}
             ${{ steps.image.outputs.prefix }}-idle-reaper-worker:${{ steps.image.outputs.short }}
           cache-from: type=gha,scope=idle-reaper-worker
           cache-to: type=gha,mode=max,scope=idle-reaper-worker
 
   # Build Proxy (Caddy reverse proxy - path-based routing for self-hosted)
   build-proxy:
+    needs: version-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -222,6 +297,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.image.outputs.prefix }}-proxy:latest
+            ${{ steps.image.outputs.prefix }}-proxy:v${{ needs.version-release.outputs.version }}
             ${{ steps.image.outputs.prefix }}-proxy:${{ steps.image.outputs.short }}
           cache-from: type=gha,scope=proxy
           cache-to: type=gha,mode=max,scope=proxy
