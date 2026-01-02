@@ -112,6 +112,7 @@ app.post("/api/agent/tunnel-token", async (c) => {
 				serverUrl: publicOrigin,
 				// Agent websocket connect URL.
 				wsUrl: toTunnelWsUrl(tunnelOrigin),
+				
 				// Help the agent render workspace/service URLs correctly.
 				routingMode: env.ROUTING_MODE,
 				baseDomain: env.BASE_DOMAIN,
