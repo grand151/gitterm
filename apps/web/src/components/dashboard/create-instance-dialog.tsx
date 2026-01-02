@@ -31,6 +31,7 @@ import { getAgentConnectCommand, getWorkspaceDisplayUrl } from "@/lib/utils";
 
 const ICON_MAP: Record<string, string> = {
   "opencode": "/opencode.svg",
+  "shuvcode": "/shuvcode.svg",
   "railway": "/railway.svg",
   "aws": "/EC2.svg",
   "claude": "/code.svg", 

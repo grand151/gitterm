@@ -39,8 +39,17 @@ export function getWorkspaceUrl(subdomain: string, backendUrl?: string | null): 
 /**
  * Construct the opencode attach command
  */
-export function getAttachCommand(subdomain: string, backendUrl?: string | null): string {
+export function getAttachCommand(subdomain: string, agentName: string, backendUrl?: string | null): string {
 	const url = getWorkspaceUrl(subdomain, backendUrl);
+
+	// TODO: Better agent name detection
+	if (agentName.toLocaleLowerCase().includes("opencode")) {
+		return `opencode attach ${url}`;
+	}
+	if (agentName.toLocaleLowerCase().includes("shuvcode")) {
+		return `shuvcode attach ${url}`;
+	}
+
 	return `opencode attach ${url}`;
 }
 

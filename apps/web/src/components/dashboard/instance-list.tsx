@@ -214,7 +214,7 @@ function InstanceCard({ workspace, providers }: { workspace: Workspace; provider
     ? isPending 
       ? getAgentConnectCommand(workspace.id)
       : workspace.subdomain 
-        ? getAttachCommand(workspace.subdomain, workspace.backendUrl)
+        ? getAttachCommand(workspace.subdomain, workspace.image.agentType.name, workspace.backendUrl)
         : null
     : null;
   
@@ -363,7 +363,7 @@ function InstanceCard({ workspace, providers }: { workspace: Workspace; provider
                 className="h-9 flex-1 text-xs gap-2 bg-primary/80 text-primary-foreground hover:bg-primary/90"
                 onClick={() => {
                   if (workspace.subdomain) {
-                    const command = getAttachCommand(workspace.subdomain, workspace.backendUrl);
+                    const command = getAttachCommand(workspace.subdomain, workspace.image.agentType.name, workspace.backendUrl);
                     navigator.clipboard.writeText(command);
                     toast.success("Attach command copied to clipboard!");
                   }
