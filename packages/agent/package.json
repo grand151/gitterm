@@ -1,6 +1,6 @@
 {
   "name": "@opeoginni/gitterm-agent",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Tunnel agent for exposing local development ports through gitterm.dev",
   "type": "module",
   "license": "MIT",

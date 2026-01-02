@@ -15,15 +15,21 @@ const DEFAULT_BASE_DOMAIN = "gitterm.dev";
 /**
  * Construct a workspace URL from subdomain
  */
-function getWorkspaceUrl(subdomain: string, cfg?: { routingMode?: "path" | "subdomain"; baseDomain?: string; serverUrl?: string }): string {
+function getWorkspaceUrl(
+	subdomain: string,
+	cfg?: { routingMode?: "path" | "subdomain"; baseDomain?: string; serverUrl?: string },
+): string {
 	const routingMode = cfg?.routingMode ?? "subdomain";
+	const baseDomain = cfg?.baseDomain || DEFAULT_BASE_DOMAIN;
+	const protocol = baseDomain.includes("localhost") ? "http" : "https";
+
 	if (routingMode === "path") {
-		const origin = cfg?.serverUrl || "http://localhost";
+		// In many deployments the API host differs from the public app/proxy host (e.g. api.example.com vs example.com).
+		// Prefer BASE_DOMAIN for the public URL; fall back to serverUrl when BASE_DOMAIN isn't provided.
+		const origin = cfg?.baseDomain ? `${protocol}://${baseDomain}` : cfg?.serverUrl || "http://localhost";
 		return `${origin.replace(/\/+$/, "")}/ws/${subdomain}`;
 	}
 
-	const baseDomain = cfg?.baseDomain || process.env.BASE_DOMAIN || DEFAULT_BASE_DOMAIN;
-	const protocol = baseDomain.includes("localhost") ? "http" : "https";
 	return `${protocol}://${subdomain}.${baseDomain}`;
 }
 
@@ -37,7 +43,9 @@ function getServiceUrl(
 ): string {
 	const routingMode = cfg?.routingMode ?? "subdomain";
 	if (routingMode === "path") {
-		const origin = cfg?.serverUrl || "http://localhost";
+		const baseDomain = cfg?.baseDomain || process.env.BASE_DOMAIN || DEFAULT_BASE_DOMAIN;
+		const protocol = baseDomain.includes("localhost") ? "http" : "https";
+		const origin = cfg?.baseDomain ? `${protocol}://${baseDomain}` : cfg?.serverUrl || "http://localhost";
 		return `${origin.replace(/\/+$/, "")}/ws/${serviceName}-${mainSubdomain}`;
 	}
 
