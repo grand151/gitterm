@@ -1,13 +1,14 @@
 import z from "zod";
 import { protectedProcedure, router } from "../..";
 import { TRPCError } from "@trpc/server";
-import { db, eq, and, sql } from "@gitterm/db";
+import { db, eq, and, sql, desc } from "@gitterm/db";
 import { user } from "@gitterm/db/schema/auth";
-import { workspace, volume, usageSession } from "@gitterm/db/schema/workspace";
-import { cloudProvider } from "@gitterm/db/schema/cloud";
+import { workspace, volume, usageSession, agentWorkspaceConfig } from "@gitterm/db/schema/workspace";
+import { cloudProvider, agentType } from "@gitterm/db/schema/cloud";
 import { sendAdminMessage } from "../../utils/discord";
 import { closeUsageSession } from "../../utils/metering";
 import { getProviderByCloudProviderId } from "../../providers";
+import { validateAgentConfig } from "@gitterm/schema";
 
 export const userRouter = router({
     deleteUser: protectedProcedure.mutation(async ({ ctx }) => {
@@ -105,6 +106,140 @@ export const userRouter = router({
                 cause: error instanceof Error ? error.message : "Unknown error",
             });
         }
+    }),
+
+    addAgentConfiguration: protectedProcedure.input(z.object({
+        name: z.string().min(1).max(100),
+        agentTypeId: z.string().min(1),
+        config: z.record(z.string(), z.any()),
+    })).mutation(async ({ ctx, input }) => {
+        const userId = ctx.session.user.id;
+        if (!userId) {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+        }
+
+        const fetchedAgentType = await db.query.agentType.findFirst({
+            where: eq(agentType.id, input.agentTypeId),
+        });
+
+        if (!fetchedAgentType) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Agent type not found" });
+        }
+
+        const validationResult = await validateAgentConfig(fetchedAgentType.name, input.config);
+
+        if (!validationResult.success) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid configuration format", cause: validationResult.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") });
+        }
+
+        const [agentConfiguration] = await db.insert(agentWorkspaceConfig).values({
+            userId,
+            name: input.name,
+            agentTypeId: input.agentTypeId,
+            config: input.config,
+        }).returning();
+
+        return { success: true, agentConfiguration };
+    }),
+
+    updateAgentConfiguration: protectedProcedure.input(z.object({
+        id: z.uuid(),
+        name: z.string().min(1).max(100).optional(),
+        config: z.record(z.string(), z.any()).optional(),
+    })).mutation(async ({ ctx, input }) => {
+        const userId = ctx.session.user.id;
+        if (!userId) {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+        }
+
+        // Verify ownership
+        const existing = await db.query.agentWorkspaceConfig.findFirst({
+            where: and(
+                eq(agentWorkspaceConfig.id, input.id),
+                eq(agentWorkspaceConfig.userId, userId)
+            ),
+        });
+
+        if (!existing) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Configuration not found" });
+        }
+
+        const fetchedAgentType = await db.query.agentType.findFirst({
+            where: eq(agentType.id, existing.agentTypeId),
+        });
+
+        if (!fetchedAgentType) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Agent type not found" });
+        }
+        
+        console.log("Validating configuration for agent type:", fetchedAgentType.name);
+        const validationResult = await validateAgentConfig(fetchedAgentType.name, input.config);
+        console.log("Validation result:", validationResult);
+
+        if (!validationResult.success) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid configuration format", cause: validationResult.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") });
+        }
+
+        const [updated] = await db.update(agentWorkspaceConfig)
+            .set({
+                ...(input.name && { name: input.name }),
+                ...(input.config && { config: input.config }),
+                updatedAt: new Date(),
+            })
+            .where(eq(agentWorkspaceConfig.id, input.id))
+            .returning();
+
+        return { success: true, agentConfiguration: updated };
+    }),
+
+    listAgentConfigurations: protectedProcedure.query(async ({ ctx }) => {
+        const userId = ctx.session.user.id;
+        if (!userId) {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+        }
+
+        const configurations = await db
+            .select({
+                id: agentWorkspaceConfig.id,
+                name: agentWorkspaceConfig.name,
+                agentTypeId: agentWorkspaceConfig.agentTypeId,
+                agentTypeName: agentType.name,
+                config: agentWorkspaceConfig.config,
+                createdAt: agentWorkspaceConfig.createdAt,
+                updatedAt: agentWorkspaceConfig.updatedAt,
+            })
+            .from(agentWorkspaceConfig)
+            .leftJoin(agentType, eq(agentWorkspaceConfig.agentTypeId, agentType.id))
+            .where(eq(agentWorkspaceConfig.userId, userId))
+            .orderBy(desc(agentWorkspaceConfig.updatedAt));
+
+        return { configurations };
+    }),
+
+    deleteAgentConfiguration: protectedProcedure.input(z.object({
+        id: z.string().uuid(),
+    })).mutation(async ({ ctx, input }) => {
+        const userId = ctx.session.user.id;
+        if (!userId) {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "User not authenticated" });
+        }
+
+        // Verify ownership before deleting
+        const existing = await db.query.agentWorkspaceConfig.findFirst({
+            where: and(
+                eq(agentWorkspaceConfig.id, input.id),
+                eq(agentWorkspaceConfig.userId, userId)
+            ),
+        });
+
+        if (!existing) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Configuration not found" });
+        }
+
+        await db.delete(agentWorkspaceConfig)
+            .where(eq(agentWorkspaceConfig.id, input.id));
+
+        return { success: true };
     }),
 
     submitFeedback: protectedProcedure.input(z.object({

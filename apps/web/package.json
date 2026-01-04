@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
     "@gitterm/api": "workspace:*",
     "@gitterm/auth": "workspace:*",
     "@gitterm/env": "workspace:*",
@@ -28,6 +29,7 @@
     "@trpc/client": "catalog:",
     "@trpc/server": "catalog:",
     "@trpc/tanstack-react-query": "^11.5.0",
+    "@uiw/react-codemirror": "^4.25.4",
     "babel-plugin-react-compiler": "^1.0.0",
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
@@ -45,13 +47,13 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@gitterm/config": "workspace:*",
     "@tailwindcss/postcss": "^4.1.10",
+    "@tanstack/react-query-devtools": "^5.85.5",
     "@types/node": "^20",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "tailwindcss": "^4.1.10",
-    "typescript": "catalog:",
-    "@tanstack/react-query-devtools": "^5.85.5",
-    "@gitterm/config": "workspace:*"
+    "typescript": "catalog:"
   }
 }

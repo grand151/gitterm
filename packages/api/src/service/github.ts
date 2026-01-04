@@ -31,10 +31,8 @@ function decodePrivateKey(key: string): string {
     try {
       // Decode base64 to get the actual PEM key
       const decoded = Buffer.from(key, 'base64').toString('utf-8');
-      logger.debug("Decoded base64 GitHub private key");
       return decoded;
     } catch (error) {
-      logger.error("Failed to decode base64 GitHub private key", {}, error as Error);
       throw new Error("Invalid GitHub App private key format");
     }
   }

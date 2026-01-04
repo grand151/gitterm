@@ -256,231 +256,7 @@ export const workspaceRouter = router({
         });
       }
     }),
-
-  // Create or update workspace configuration
-  createConfig: protectedProcedure
-    .input(
-      z.object({
-        agentTypeId: z.string().min(1, "Agent type ID is required"),
-        config: z.record(z.string(), z.any()).refine(
-          (obj) => Object.keys(obj).length > 0,
-          { message: "Config cannot be empty" }
-        ),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const userId = ctx.session.user.id;
-
-      if (!userId) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "User not authenticated",
-        });
-      }
-
-      try {
-        // Validate config against the agent-specific schema
-        const validationResult = validateAgentConfig(
-          input.agentTypeId,
-          input.config
-        );
-
-        if (!validationResult.success) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Invalid configuration format",
-            cause: validationResult.error.issues
-              .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-              .join("; "),
-          });
-        }
-
-        // Check if config already exists for this user and agent type
-        const existingConfigs = await db
-          .select()
-          .from(agentWorkspaceConfig)
-          .where(
-            and(
-              eq(agentWorkspaceConfig.userId, userId),
-              eq(agentWorkspaceConfig.agentTypeId, input.agentTypeId)
-            )
-          );
-
-        if (existingConfigs.length > 0) {
-          // Update existing config
-          const [updatedConfig] = await db
-            .update(agentWorkspaceConfig)
-            .set({
-              config: validationResult.data,
-              updatedAt: new Date(),
-            })
-            .where(eq(agentWorkspaceConfig.id, existingConfigs[0]!.id))
-            .returning();
-
-          return {
-            success: true,
-            message: "Configuration updated successfully",
-            config: updatedConfig,
-          };
-        } else {
-          // Create new config
-          const [newConfig] = await db
-            .insert(agentWorkspaceConfig)
-            .values({
-              userId,
-              agentTypeId: input.agentTypeId,
-              config: validationResult.data,
-            })
-            .returning();
-
-          return {
-            success: true,
-            message: "Configuration created successfully",
-            config: newConfig,
-          };
-        }
-      } catch (error) {
-        if (error instanceof TRPCError) throw error;
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to create or update configuration",
-          cause: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    }),
-
-  // Get workspace configuration for a specific agent type
-  getConfig: protectedProcedure
-    .input(
-      z.object({
-        agentTypeId: z.string().min(1, "Agent type ID is required"),
-      })
-    )
-    .query(async ({ input, ctx }) => {
-      const userId = ctx.session.user.id;
-
-      if (!userId) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "User not authenticated",
-        });
-      }
-
-      try {
-        const configs = await db
-          .select()
-          .from(agentWorkspaceConfig)
-          .where(
-            and(
-              eq(agentWorkspaceConfig.userId, userId),
-              eq(agentWorkspaceConfig.agentTypeId, input.agentTypeId)
-            )
-          );
-
-        if (configs.length === 0) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Configuration not found for this agent type",
-          });
-        }
-
-        return {
-          success: true,
-          config: configs[0]!,
-        };
-      } catch (error) {
-        if (error instanceof TRPCError) throw error;
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to fetch configuration",
-          cause: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    }),
-
-  // List all configurations for the authenticated user
-  listConfigs: protectedProcedure.query(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
-
-    if (!userId) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "User not authenticated",
-      });
-    }
-
-    try {
-      const configs = await db
-        .select()
-        .from(agentWorkspaceConfig)
-        .where(eq(agentWorkspaceConfig.userId, userId));
-
-      return {
-        success: true,
-        configs,
-      };
-    } catch (error) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to fetch configurations",
-        cause: error instanceof Error ? error.message : "Unknown error",
-      });
-    }
-  }),
-
-  // Delete workspace configuration
-  deleteConfig: protectedProcedure
-    .input(
-      z.object({
-        agentTypeId: z.string().min(1, "Agent type ID is required"),
-      })
-    )
-    .mutation(async ({ input, ctx }) => {
-      const userId = ctx.session.user.id;
-
-      if (!userId) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "User not authenticated",
-        });
-      }
-
-      try {
-        const configs = await db
-          .select()
-          .from(agentWorkspaceConfig)
-          .where(
-            and(
-              eq(agentWorkspaceConfig.userId, userId),
-              eq(agentWorkspaceConfig.agentTypeId, input.agentTypeId)
-            )
-          );
-
-        if (configs.length === 0) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Configuration not found",
-          });
-        }
-
-        await db
-          .delete(agentWorkspaceConfig)
-          .where(eq(agentWorkspaceConfig.id, configs[0]!.id));
-
-        return {
-          success: true,
-          message: "Configuration deleted successfully",
-        };
-      } catch (error) {
-        if (error instanceof TRPCError) throw error;
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to delete configuration",
-          cause: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    }),
-
+    
   // Create or update environment variables for a workspace
   createEnvironmentVariables: protectedProcedure
     .input(
@@ -1239,9 +1015,17 @@ export const workspaceRouter = router({
         // In subdomain mode: returns subdomain.baseDomain
         const domain = getWorkspaceDomain(subdomain);
 
+        const DEFAULT_OPENCODE_CONFIG = {
+          "$schema": "https://opencode.ai/config.json",
+          "username": `Gitterm: ${fetchedUser.name}`,
+        };
+
         const DEFAULT_DOCKER_ENV_VARS = {
           "REPO_URL": input.repo || undefined,
-          "OPENCODE_CONFIG_BASE64": agentConfig ? Buffer.from(JSON.stringify(agentConfig.config)).toString("base64") : undefined,
+          "OPENCODE_CONFIG_BASE64": agentConfig ? Buffer.from(JSON.stringify({
+            ...(agentConfig.config as Record<string, any>),
+            "username": `Gitterm: ${fetchedUser.name}`,
+           })).toString("base64") : DEFAULT_OPENCODE_CONFIG,
           "USER_GITHUB_USERNAME": githubUsername,
           "GITHUB_APP_TOKEN": githubAppToken,
           "GITHUB_APP_TOKEN_EXPIRY": githubAppTokenExpiry,

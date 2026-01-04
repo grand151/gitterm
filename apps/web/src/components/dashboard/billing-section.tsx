@@ -163,10 +163,9 @@ function PlanCard({
 
 export function BillingSection({ currentPlan }: BillingSectionProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const showPricing = isBillingEnabled;
 
   // If neither billing nor pricing is enabled, show self-hosted message
-  if (!isBillingEnabled && !showPricing) {
+  if (!isBillingEnabled) {
     return (
       <Card>
         <CardHeader>
@@ -227,7 +226,7 @@ export function BillingSection({ currentPlan }: BillingSectionProps) {
               <ExternalLink className="ml-2 h-4 w-4" />
             </Button>
           )}
-          {currentPlan === "free" && showPricing && (
+          {currentPlan === "free" && isBillingEnabled && (
             <Link href={"/pricing" as Route}>
               <Button variant="default" className="gap-2">
                 <Sparkles className="h-4 w-4" />
@@ -238,57 +237,6 @@ export function BillingSection({ currentPlan }: BillingSectionProps) {
           )}
         </CardFooter>
       </Card>
-
-      {/* Plan Cards - only show if billing is enabled */}
-      {isBillingEnabled && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Available Plans</h3>
-            {showPricing && (
-              <Link href={"/pricing" as Route} className="text-sm text-primary hover:underline">
-                View all plans
-              </Link>
-            )}
-          </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            {(Object.entries(PLANS) as [Exclude<UserPlan, "free">, PlanConfig][]).map(
-              ([plan, config]) => (
-                <PlanCard
-                  key={plan}
-                  plan={plan}
-                  config={config}
-                  currentPlan={currentPlan}
-                  onUpgrade={handleUpgrade}
-                  isLoading={isLoading}
-                />
-              )
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* If only pricing is enabled (not billing), show a simple upgrade CTA */}
-      {!isBillingEnabled && showPricing && currentPlan === "free" && (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Unlock More Features
-            </CardTitle>
-            <CardDescription>
-              Get custom subdomains, unlimited cloud runtime, and more.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter>
-            <Link href={"/pricing" as Route}>
-              <Button className="gap-2">
-                View Pricing
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
-      )}
     </div>
   );
 }
@@ -297,10 +245,9 @@ export function BillingSection({ currentPlan }: BillingSectionProps) {
  * Plan badge for display in navigation/header
  */
 export function PlanBadge({ plan }: { plan: UserPlan }) {
-  const showPricing = isBillingEnabled;
   
   // Don't show badge if pricing is disabled or user is on free plan
-  if (!showPricing || plan === "free") {
+  if (!isBillingEnabled || plan === "free") {
     return null;
   }
 
