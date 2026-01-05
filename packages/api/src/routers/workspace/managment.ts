@@ -986,7 +986,7 @@ export const workspaceRouter = router({
             }
             const uuid = randomUUID();
             const uuidParts = uuid.split('-');
-            subdomain = `ws-${uuidParts[0]}}`;
+            subdomain = `ws-${uuidParts[0]}`;
             attempts++;
             
             // Check if generated subdomain is reserved (unlikely but possible)
