@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,10 +16,12 @@ import {
   initiateCheckout,
   openCustomerPortal,
   isBillingEnabled,
+  authClient,
 } from "@/lib/auth-client";
-import { Check, ExternalLink, Loader2, Sparkles, Terminal, ArrowRight } from "lucide-react";
+import { Check, ExternalLink, Loader2, Sparkles, Terminal, ArrowRight, CreditCard, Settings, Zap } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
+import { cn } from "@/lib/utils";
 
 type UserPlan = "free" | "tunnel" | "pro";
 
@@ -163,6 +166,9 @@ function PlanCard({
 
 export function BillingSection({ currentPlan }: BillingSectionProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isPortalLoading, setIsPortalLoading] = useState(false);
+  const { data: session } = authClient.useSession();
+  const router = useRouter();
 
   // If neither billing nor pricing is enabled, show self-hosted message
   if (!isBillingEnabled) {
@@ -189,6 +195,15 @@ export function BillingSection({ currentPlan }: BillingSectionProps) {
       window.location.href = "/pricing";
       return;
     }
+
+    // Check if user is logged in before checkout
+    if (!session?.user) {
+      // Redirect to login with plan parameter in redirect URL
+      const redirectUrl = `/pricing?plan=${plan}`;
+      router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+      return;
+    }
+
     setIsLoading(true);
     try {
       await initiateCheckout(plan);
@@ -199,6 +214,138 @@ export function BillingSection({ currentPlan }: BillingSectionProps) {
     }
   };
 
+  const handleOpenPortal = async () => {
+    setIsPortalLoading(true);
+    try {
+      await openCustomerPortal();
+    } catch (error) {
+      console.error("Failed to open customer portal:", error);
+    } finally {
+      setIsPortalLoading(false);
+    }
+  };
+
+  const planConfig = currentPlan !== "free" ? PLANS[currentPlan] : null;
+
+  // For subscribed users, show a more detailed subscription management section
+  if (currentPlan !== "free") {
+    return (
+      <div className={cn(
+        "grid gap-6",
+        currentPlan === "tunnel" ? "md:grid-cols-2" : "grid-cols-1"
+      )}>
+        {/* Active Subscription Card */}
+        <Card className="border-primary/20 flex flex-col">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  {planConfig?.icon}
+                </div>
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    {planConfig?.name} Plan
+                    <Badge variant="default" className="capitalize">
+                      Active
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    {planConfig?.price}{planConfig?.period}
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4 flex-1">
+            <div>
+              <p className="text-sm font-medium mb-2">Your plan includes:</p>
+              <ul className="space-y-2">
+                {planConfig?.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col sm:flex-row gap-3 border-t pt-6">
+            <Button 
+              variant="outline" 
+              onClick={handleOpenPortal}
+              disabled={isPortalLoading}
+              className="w-full"
+            >
+              {isPortalLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Settings className="mr-2 h-4 w-4" />
+              )}
+              Manage Subscription
+              <ExternalLink className="ml-2 h-4 w-4" />
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* Upgrade Option for Tunnel users */}
+        {currentPlan === "tunnel" && (
+          <Card className="border-dashed border-primary/30 flex flex-col">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Upgrade to Pro</CardTitle>
+                  <CardDescription>
+                    $15/month
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1">
+              <p className="text-sm font-medium mb-2">Everything in Tunnel, plus:</p>
+              <ul className="space-y-2">
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span>Unlimited cloud runtime</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span>Custom subdomain for cloud workspaces</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span>Multi-region deployments</span>
+                </li>
+                <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span>Priority support</span>
+                </li>
+              </ul>
+            </CardContent>
+            <CardFooter className="border-t pt-6">
+              <Button 
+                onClick={() => handleUpgrade("pro")}
+                disabled={isLoading}
+                className="w-full"
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                Upgrade to Pro
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // For free users, show upgrade options
   return (
     <div className="space-y-6">
       {/* Current Plan Display */}
@@ -212,29 +359,26 @@ export function BillingSection({ currentPlan }: BillingSectionProps) {
               </CardDescription>
             </div>
             <Badge
-              variant={currentPlan === "free" ? "secondary" : "default"}
+              variant="secondary"
               className="capitalize"
             >
               {currentPlan}
             </Badge>
           </div>
         </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Upgrade your plan to unlock more features and remove usage limits.
+          </p>
+        </CardContent>
         <CardFooter className="flex gap-3">
-          {currentPlan !== "free" && isBillingEnabled && (
-            <Button variant="outline" onClick={() => openCustomerPortal()}>
-              Manage Subscription
-              <ExternalLink className="ml-2 h-4 w-4" />
+          <Link href={"/pricing" as Route}>
+            <Button variant="default" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              View Upgrade Options
+              <ArrowRight className="h-4 w-4" />
             </Button>
-          )}
-          {currentPlan === "free" && isBillingEnabled && (
-            <Link href={"/pricing" as Route}>
-              <Button variant="default" className="gap-2">
-                <Sparkles className="h-4 w-4" />
-                View Upgrade Options
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          )}
+          </Link>
         </CardFooter>
       </Card>
     </div>

@@ -171,7 +171,7 @@ export const auth = betterAuth({
             use: [
               checkout({
                 authenticatedUsersOnly: true,
-                successUrl: "/dashboard?checkout=success&checkout_id={CHECKOUT_ID}",
+                successUrl: "/checkout/success?checkout_id={CHECKOUT_ID}",
                 products: POLAR_PRODUCTS,
               }),
               portal(),

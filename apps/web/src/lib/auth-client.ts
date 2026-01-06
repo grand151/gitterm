@@ -67,6 +67,12 @@ export async function initiateCheckout(slug: "tunnel" | "pro") {
     return;
   }
 
+  // Store the selected plan in sessionStorage so the success page can display it
+  // This is needed because the webhook may not have updated the user's plan yet
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem("checkout_plan", slug);
+  }
+
   // The checkout method is added by the polarClient plugin
   // It accepts either { products: [...productIds] } or { slug: "..." }
   await (authClient as any).checkout({ slug });

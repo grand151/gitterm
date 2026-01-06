@@ -1,14 +1,13 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { LandingHeader } from "@/components/landing/header";
 import { Footer } from "@/components/landing/footer";
 import { initiateCheckout, isBillingEnabled, authClient } from "@/lib/auth-client";
-import { CheckCircle2, Terminal, Zap, ExternalLink } from "lucide-react";
+import { CheckCircle2, Terminal, Zap, ExternalLink, ArrowRight, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
 import { cn } from "@/lib/utils";
 
 type UserPlan = "free" | "tunnel" | "pro";
@@ -98,14 +97,17 @@ function PricingCard({
   currentPlan,
   onUpgrade,
   isLoading,
+  loadingPlan,
 }: {
   plan: PlanTier;
   currentPlan?: UserPlan;
   onUpgrade: (slug: "tunnel" | "pro") => void;
   isLoading: boolean;
+  loadingPlan?: "tunnel" | "pro" | null;
 }) {
   const isCurrentPlan = plan.slug && currentPlan === plan.slug;
   const isFreeCurrentPlan = plan.name === "Free" && currentPlan === "free";
+  const isThisPlanLoading = isLoading && loadingPlan === plan.slug;
 
   return (
     <Card
@@ -155,44 +157,58 @@ function PricingCard({
           <Link
             href="https://railway.com/template/gitterm?referralCode=o9MFOP"
             target="_blank"
-            className="w-full"
+            className={cn(
+              "relative inline-flex w-full items-center justify-center rounded-md px-6 py-2.5 text-sm font-medium transition-colors",
+              "bg-foreground text-background hover:bg-foreground/90",
+              "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            )}
           >
-            <Button
-              className="relative inline-flex w-full items-center justify-center rounded-md bg-foreground text-background px-6 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-            >
-              <div className="absolute -inset-0.5 -z-10 rounded-lg bg-gradient-to-b from-muted to-primary/50 opacity-75 blur" />
-              {plan.actionLabel}
-              <ExternalLink className="ml-2 h-4 w-4" />
-            </Button>
+            <div className="absolute -inset-0.5 -z-10 rounded-lg bg-gradient-to-b from-muted to-primary/50 opacity-75 blur" />
+            {plan.actionLabel}
+            <ExternalLink className="ml-2 h-4 w-4" />
           </Link>
         ) : isCurrentPlan || isFreeCurrentPlan ? (
-          <Button variant="outline" className="w-full" disabled>
+          <span className="inline-flex w-full items-center justify-center rounded-md border border-input bg-background px-6 py-2.5 text-sm font-medium text-muted-foreground">
             Current Plan
-          </Button>
+          </span>
         ) : plan.slug ? (
-          <Button
+          <button
+            onClick={() => onUpgrade(plan.slug!)}
+            disabled={isLoading}
             className={cn(
-              "relative inline-flex w-full items-center justify-center rounded-md px-6 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+              "relative inline-flex w-full items-center justify-center rounded-md px-6 py-2.5 text-sm font-medium transition-all cursor-pointer",
+              "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+              "disabled:opacity-70 disabled:cursor-not-allowed",
               plan.popular
                 ? "bg-foreground text-background hover:bg-foreground/90"
                 : "bg-primary text-primary-foreground hover:bg-primary/90"
             )}
-            onClick={() => onUpgrade(plan.slug!)}
-            disabled={isLoading}
           >
             {plan.popular && (
               <div className="absolute -inset-0.5 -z-10 rounded-lg bg-gradient-to-b from-[#c7d2fe] to-[#8678f9] opacity-75 blur" />
             )}
-            {plan.actionLabel}
-          </Button>
+            {isThisPlanLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                {plan.actionLabel}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </button>
         ) : (
-          <Link href="/dashboard" className="w-full">
-            <Button
-              variant="outline"
-              className="w-full"
-            >
-              {plan.actionLabel}
-            </Button>
+          <Link
+            href="/dashboard"
+            className={cn(
+              "inline-flex w-full items-center justify-center rounded-md border border-input bg-background px-6 py-2.5 text-sm font-medium",
+              "hover:bg-accent hover:text-accent-foreground transition-colors"
+            )}
+          >
+            {plan.actionLabel}
+            <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         )}
       </CardFooter>
@@ -200,10 +216,12 @@ function PricingCard({
   );
 }
 
-export default function PricingPage() {
+function PricingPageContent() {
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState<"tunnel" | "pro" | null>(null);
   const { data: session } = authClient.useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const pricingEnabled = isBillingEnabled;
 
   // Redirect if pricing is disabled
@@ -212,6 +230,31 @@ export default function PricingPage() {
       router.replace("/");
     }
   }, [pricingEnabled, router]);
+
+  // Auto-trigger checkout if user returns from login with a plan parameter
+  useEffect(() => {
+    const planParam = searchParams.get("plan");
+    if (planParam && (planParam === "tunnel" || planParam === "pro") && session?.user && !isLoading) {
+      // User is logged in and has a plan parameter, trigger checkout
+      const triggerCheckout = async () => {
+        setIsLoading(true);
+        setLoadingPlan(planParam);
+        try {
+          await initiateCheckout(planParam);
+          // Remove plan param from URL after initiating checkout
+          router.replace("/pricing");
+        } catch (error) {
+          console.error("Checkout failed:", error);
+          // Remove plan param even on error
+          router.replace("/pricing");
+        } finally {
+          setIsLoading(false);
+          setLoadingPlan(null);
+        }
+      };
+      triggerCheckout();
+    }
+  }, [searchParams, session?.user, router, isLoading]);
 
   // Don't render if pricing is disabled
   if (!pricingEnabled) {
@@ -226,13 +269,25 @@ export default function PricingPage() {
       window.location.href = "/dashboard";
       return;
     }
+
+    // Check if user is logged in
+    if (!session?.user) {
+      // Redirect to login with plan parameter in redirect URL
+      const redirectUrl = `/pricing?plan=${slug}`;
+      router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}`);
+      return;
+    }
+
+    // User is logged in, proceed with checkout
     setIsLoading(true);
+    setLoadingPlan(slug);
     try {
       await initiateCheckout(slug);
     } catch (error) {
       console.error("Checkout failed:", error);
     } finally {
       setIsLoading(false);
+      setLoadingPlan(null);
     }
   };
 
@@ -261,6 +316,7 @@ export default function PricingPage() {
                 currentPlan={session ? currentPlan : undefined}
                 onUpgrade={handleUpgrade}
                 isLoading={isLoading}
+                loadingPlan={loadingPlan}
               />
             ))}
           </section>
@@ -296,11 +352,20 @@ export default function PricingPage() {
               Need help choosing the right plan? Check out our docs or reach out.
             </p>
             <div className="flex justify-center gap-4 flex-wrap">
-              <Link href="https://github.com/OpeOginni/gitterm" target="_blank">
-                <Button variant="outline">View on GitHub</Button>
+              <Link 
+                href="https://github.com/OpeOginni/gitterm" 
+                target="_blank"
+                className="inline-flex items-center justify-center rounded-md border border-input bg-background px-6 py-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+              >
+                View on GitHub
+                <ExternalLink className="ml-2 h-4 w-4" />
               </Link>
-              <Link href="/dashboard">
-                <Button>Get Started Free</Button>
+              <Link 
+                href="/dashboard"
+                className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-6 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Get Started Free
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </div>
           </div>
@@ -309,5 +374,19 @@ export default function PricingPage() {
 
       <Footer />
     </main>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <Terminal className="h-8 w-8 animate-pulse text-primary" />
+        </div>
+      }
+    >
+      <PricingPageContent />
+    </Suspense>
   );
 }
