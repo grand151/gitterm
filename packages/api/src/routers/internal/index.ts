@@ -1,62 +1,31 @@
 import z from "zod";
 import { internalProcedure, router } from "../../index";
 import { db, eq, and, sql, gt, or } from "@gitterm/db";
-import { workspace, usageSession, dailyUsage, type SessionStopSource } from "@gitterm/db/schema/workspace";
-import { workspaceGitConfig } from "@gitterm/db/schema/integrations";
+import {
+  workspace,
+  usageSession,
+  dailyUsage,
+  type SessionStopSource,
+} from "@gitterm/db/schema/workspace";
+import { workspaceGitConfig, githubAppInstallation } from "@gitterm/db/schema/integrations";
+import { agentLoop, agentLoopRun } from "@gitterm/db/schema/agent-loop";
+import { modelProvider, model } from "@gitterm/db/schema/model-credentials";
 import { cloudProvider, region } from "@gitterm/db/schema/cloud";
 import { TRPCError } from "@trpc/server";
 import { getProviderByCloudProviderId } from "../../providers";
 import { WORKSPACE_EVENTS } from "../../events/workspace";
-import { closeUsageSession, getConfiguredIdleTimeout, getConfiguredFreeTierMinutes } from "../../utils/metering";
+import {
+  closeUsageSession,
+  getConfiguredIdleTimeout,
+  getConfiguredFreeTierMinutes,
+} from "../../utils/metering";
 import { auth } from "@gitterm/auth";
-import { GitHubAppService, GitHubInstallationNotFoundError } from "../../service/github";
+import { getGitHubAppService, GitHubInstallationNotFoundError } from "../../service/github";
 import { logger } from "../../utils/logger";
-
-// Railway webhook schema (moved from listener)
-const deploymentStatus = z.enum(["BUILDING", "DEPLOYING", "FAILED", "SUCCESS"]);
-const webhookType = z.enum(["Deployment.created", "Deployment.deploying", "Deployment.deployed", "Deployment.failed"]);
-const webhookSeverity = z.enum(["INFO", "WARNING", "ERROR"]);
-
-const railwayWebhookSchema = z.object({
-  type: webhookType,
-  severity: webhookSeverity,
-  timestamp: z.string(),
-  resource: z.object({
-    workspace: z.object({
-      id: z.string(),
-      name: z.string(),
-    }).optional(),
-    project: z.object({
-      id: z.string(),
-      name: z.string(),
-    }).optional(),
-    environment: z.object({
-      id: z.string(),
-      name: z.string(),
-      isEphemeral: z.boolean(),
-    }).optional(),
-    service: z.object({
-      id: z.string(),
-      name: z.string()
-    }).optional(),
-    deployment: z.object({
-      id: z.string().optional(),
-    }).optional(),
-  }).passthrough(),
-  details: z.object({
-    id: z.string().optional(),
-    source: z.string().optional(),
-    status: deploymentStatus.optional(),
-    builder: z.string().optional(),
-    providers: z.string().optional(),
-    serviceId: z.string().optional(),
-    imageSource: z.string().optional(),
-    branch: z.string().optional(),
-    commitHash: z.string().optional(),
-    commitAuthor: z.string().optional(),
-    commitMessage: z.string().optional(),
-  }).passthrough(),
-});
+import { railwayWebhookSchema } from "../railway/webhook";
+import { agentLoopWebhookSchema } from "../agent-loop/webhook";
+import { getAgentLoopService } from "../../service/agent-loop";
+import { getModelCredentialsService } from "../../service/model-credentials";
 
 /**
  * Internal router for service-to-service communication
@@ -65,17 +34,19 @@ const railwayWebhookSchema = z.object({
 export const internalRouter = router({
   // Validate session from cookie (for proxy)
   validateSession: internalProcedure
-    .input(z.object({ 
-      cookie: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        cookie: z.string().optional(),
+      }),
+    )
     .query(async ({ input }) => {
       const headers = new Headers();
       if (input.cookie) {
         headers.set("cookie", input.cookie);
       }
-      
+
       const session = await auth.api.getSession({ headers });
-      
+
       return {
         userId: session?.user?.id ?? null,
         valid: !!session?.user?.id,
@@ -137,8 +108,8 @@ export const internalRouter = router({
         and(
           eq(workspace.status, "running"),
           eq(workspace.hostingType, "cloud"), // Only check cloud workspaces for idle timeout
-          sql`${workspace.lastActiveAt} < ${idleThreshold}`
-        )
+          sql`${workspace.lastActiveAt} < ${idleThreshold}`,
+        ),
       );
 
     return idleWorkspaces;
@@ -150,7 +121,7 @@ export const internalRouter = router({
   /**
    * Get workspaces that belong to users who have exceeded their daily quota
    * Used by idle-reaper worker to enforce free tier limits
-   * 
+   *
    * NOTE: Comment out this entire procedure when moving to paid plans
    */
   getQuotaExceededWorkspaces: internalProcedure.query(async () => {
@@ -171,30 +142,27 @@ export const internalRouter = router({
       .from(workspace)
       .leftJoin(
         dailyUsage,
-        and(
-          eq(workspace.userId, dailyUsage.userId),
-          eq(dailyUsage.date, today)
-        )
+        and(eq(workspace.userId, dailyUsage.userId), eq(dailyUsage.date, today)),
       )
       .where(
         and(
           eq(workspace.status, "running"),
-          eq(workspace.hostingType, "cloud") // Only check cloud workspaces
-        )
+          eq(workspace.hostingType, "cloud"), // Only check cloud workspaces
+        ),
       );
 
     // Filter workspaces where user has exceeded quota
     // If no usage record exists (null), they haven't exceeded (0 minutes used)
     const freeTierDailyMinutes = await getConfiguredFreeTierMinutes();
     const quotaExceededWorkspaces = workspacesWithUsage.filter(
-      ws => (ws.minutesUsed ?? 0) >= freeTierDailyMinutes
+      (ws) => (ws.minutesUsed ?? 0) >= freeTierDailyMinutes,
     );
 
     logger.info(`Found ${quotaExceededWorkspaces.length} workspaces with exceeded quota`, {
       action: "quota_check",
     });
 
-    return quotaExceededWorkspaces.map(ws => ({
+    return quotaExceededWorkspaces.map((ws) => ({
       id: ws.id,
       externalInstanceId: ws.externalInstanceId,
       userId: ws.userId,
@@ -212,14 +180,11 @@ export const internalRouter = router({
       z.object({
         workspaceId: z.string(),
         stopSource: z.enum(["manual", "idle", "quota_exhausted", "error"]),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       // Get workspace with related data
-      const [ws] = await db
-        .select()
-        .from(workspace)
-        .where(eq(workspace.id, input.workspaceId));
+      const [ws] = await db.select().from(workspace).where(eq(workspace.id, input.workspaceId));
 
       if (!ws) {
         throw new TRPCError({
@@ -242,10 +207,7 @@ export const internalRouter = router({
       }
 
       // Get region
-      const [workspaceRegion] = await db
-        .select()
-        .from(region)
-        .where(eq(region.id, ws.regionId));
+      const [workspaceRegion] = await db.select().from(region).where(eq(region.id, ws.regionId));
 
       if (!workspaceRegion) {
         throw new TRPCError({
@@ -259,13 +221,13 @@ export const internalRouter = router({
       await computeProvider.stopWorkspace(
         ws.externalInstanceId,
         workspaceRegion.externalRegionIdentifier,
-        ws.externalRunningDeploymentId || undefined
+        ws.externalRunningDeploymentId || undefined,
       );
 
       // Close usage session
       const { durationMinutes } = await closeUsageSession(
         input.workspaceId,
-        input.stopSource as SessionStopSource
+        input.stopSource as SessionStopSource,
       );
 
       // Update workspace status
@@ -296,10 +258,7 @@ export const internalRouter = router({
     .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ input }) => {
       // Get workspace with related data
-      const [ws] = await db
-        .select()
-        .from(workspace)
-        .where(eq(workspace.id, input.workspaceId));
+      const [ws] = await db.select().from(workspace).where(eq(workspace.id, input.workspaceId));
 
       if (!ws) {
         throw new TRPCError({
@@ -358,11 +317,13 @@ export const internalRouter = router({
     const longTermInactiveWorkspaces = await db
       .select()
       .from(workspace)
-      .where(and(
-        or(eq(workspace.status, "running"), eq(workspace.status, "stopped")),
-        eq(workspace.hostingType, "cloud"),
-        sql`${workspace.lastActiveAt} < ${new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)}` // 4 days ago
-      ));
+      .where(
+        and(
+          or(eq(workspace.status, "running"), eq(workspace.status, "stopped")),
+          eq(workspace.hostingType, "cloud"),
+          sql`${workspace.lastActiveAt} < ${new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)}`, // 4 days ago
+        ),
+      );
 
     return longTermInactiveWorkspaces;
   }),
@@ -409,10 +370,10 @@ export const internalRouter = router({
   forkRepository: internalProcedure
     .input(
       z.object({
-        workspaceId: z.string().uuid(),
+        workspaceId: z.uuid(),
         owner: z.string(),
         repo: z.string(),
-      })
+      }),
     )
     .mutation(async ({ input }) => {
       try {
@@ -447,18 +408,19 @@ export const internalRouter = router({
           });
         }
 
-        const githubAppService = new GitHubAppService();
+        const githubService = getGitHubAppService();
         // Get GitHub App installation with verification
-        const installation = await githubAppService.getUserInstallation(
-          userId, 
+        const installation = await githubService.getUserInstallation(
+          userId,
           workspaceRecord.gitIntegrationId,
-          true // verify
+          true, // verify
         );
 
         if (!installation) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "GitHub App not connected or has been removed. Please reconnect your GitHub account.",
+            message:
+              "GitHub App not connected or has been removed. Please reconnect your GitHub account.",
           });
         }
 
@@ -477,8 +439,8 @@ export const internalRouter = router({
           .where(
             and(
               eq(workspaceGitConfig.userId, userId),
-              gt(workspaceGitConfig.forkCreatedAt, new Date(Date.now() - 60000)) // Last minute
-            )
+              gt(workspaceGitConfig.forkCreatedAt, new Date(Date.now() - 60000)), // Last minute
+            ),
           );
 
         if (recentForks.length >= 3) {
@@ -489,10 +451,10 @@ export const internalRouter = router({
         }
 
         // Fork the repository
-        const fork = await githubAppService.forkRepository(
+        const fork = await githubService.forkRepository(
           installation.installationId,
           input.owner,
-          input.repo
+          input.repo,
         );
 
         // Update or create workspace git config
@@ -535,8 +497,8 @@ export const internalRouter = router({
         }
 
         // Generate authenticated URL for the workspace to use
-        const { token } = await githubAppService.getUserToServerToken(installation.installationId);
-        const authenticatedUrl = githubAppService.getAuthenticatedGitUrl(token, fork.owner, fork.repo);
+        const { token } = await githubService.getUserToServerToken(installation.installationId);
+        const authenticatedUrl = githubService.getAuthenticatedGitUrl(token, fork.owner, fork.repo);
 
         logger.info("Fork operation completed", {
           workspaceId: input.workspaceId,
@@ -558,7 +520,7 @@ export const internalRouter = router({
         };
       } catch (error) {
         if (error instanceof TRPCError) throw error;
-        
+
         // Handle installation not found specifically
         if (error instanceof GitHubInstallationNotFoundError) {
           logger.warn("GitHub installation not found during fork", {
@@ -570,12 +532,16 @@ export const internalRouter = router({
             message: "GitHub App installation has been removed. Please reconnect.",
           });
         }
-        
-        logger.error("Failed to fork repository", {
-          workspaceId: input.workspaceId,
-          action: "fork_repository_internal",
-        }, error as Error);
-        
+
+        logger.error(
+          "Failed to fork repository",
+          {
+            workspaceId: input.workspaceId,
+            action: "fork_repository_internal",
+          },
+          error as Error,
+        );
+
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to fork repository",
@@ -599,7 +565,9 @@ export const internalRouter = router({
       if (input.type === "Deployment.deployed" && input.details?.serviceId) {
         const serviceId = input.details.serviceId;
 
-        const [railwayProvider] = await db.select().from(cloudProvider)
+        const [railwayProvider] = await db
+          .select()
+          .from(cloudProvider)
           .where(eq(cloudProvider.name, "Railway"));
 
         if (!railwayProvider) {
@@ -609,21 +577,27 @@ export const internalRouter = router({
           });
         }
 
-        const updatedWorkspaces = await db.update(workspace).set({
-          status: "running",
-          updatedAt: new Date(input.timestamp),
-          externalRunningDeploymentId: input.resource.deployment?.id
-        }).where(and(
-          eq(workspace.cloudProviderId, railwayProvider.id),
-          eq(workspace.externalInstanceId, serviceId),
-          eq(workspace.status, "pending")
-        )).returning({
-          id: workspace.id,
-          status: workspace.status,
-          updatedAt: workspace.updatedAt,
-          userId: workspace.userId,
-          workspaceDomain: workspace.domain
-        });
+        const updatedWorkspaces = await db
+          .update(workspace)
+          .set({
+            status: "running",
+            updatedAt: new Date(input.timestamp),
+            externalRunningDeploymentId: input.resource.deployment?.id,
+          })
+          .where(
+            and(
+              eq(workspace.cloudProviderId, railwayProvider.id),
+              eq(workspace.externalInstanceId, serviceId),
+              eq(workspace.status, "pending"),
+            ),
+          )
+          .returning({
+            id: workspace.id,
+            status: workspace.status,
+            updatedAt: workspace.updatedAt,
+            userId: workspace.userId,
+            workspaceDomain: workspace.domain,
+          });
 
         return { updated: updatedWorkspaces };
       }
@@ -636,13 +610,14 @@ export const internalRouter = router({
    * Returns workspace info if valid, throws if not found or unauthorized
    */
   validateWorkspaceAccess: internalProcedure
-    .input(z.object({
-      workspaceId: z.string(),
-      userId: z.string(),
-    }))
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        userId: z.string(),
+      }),
+    )
     .query(async ({ input }) => {
-      const [ws] = await db.select().from(workspace)
-        .where(eq(workspace.id, input.workspaceId));
+      const [ws] = await db.select().from(workspace).where(eq(workspace.id, input.workspaceId));
 
       if (!ws) {
         throw new TRPCError({
@@ -666,7 +641,407 @@ export const internalRouter = router({
         workspaceDomain: ws.domain,
       };
     }),
+
+  /**
+   * Process GitHub installation webhook
+   * Called by listener when it receives a GitHub App installation webhook
+   */
+  processGitHubInstallationWebhook: internalProcedure
+    .input(
+      z.object({
+        action: z.enum(["created", "deleted", "suspend", "unsuspend", "new_permissions_accepted"]),
+        installationId: z.string(),
+        accountLogin: z.string(),
+        accountId: z.string(),
+        accountType: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      logger.info("Processing GitHub installation webhook", {
+        action: `github_webhook_${input.action}`,
+        installationId: input.installationId,
+      });
+
+      if (input.action === "deleted") {
+        // User uninstalled the GitHub App from GitHub's side
+        // Clean up our database records
+        const githubService = getGitHubAppService();
+        const result = await githubService.removeInstallationByInstallationId(input.installationId);
+
+        logger.info("GitHub installation deleted via webhook", {
+          action: "github_webhook_deleted",
+          installationId: input.installationId,
+        });
+
+        return {
+          success: true,
+          action: "deleted",
+          deletedInstallations: result.deletedInstallations,
+          deletedIntegrations: result.deletedIntegrations,
+        };
+      }
+
+      if (input.action === "suspend") {
+        // App was suspended - mark as suspended in our database
+        const now = new Date();
+
+        const updatedInstallations = await db
+          .update(githubAppInstallation)
+          .set({
+            suspended: true,
+            suspendedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(githubAppInstallation.installationId, input.installationId))
+          .returning();
+
+        logger.info("GitHub installation suspended", {
+          action: "github_webhook_suspend",
+          installationId: input.installationId,
+        });
+
+        return {
+          success: true,
+          action: "suspended",
+          updatedCount: updatedInstallations.length,
+        };
+      }
+
+      if (input.action === "unsuspend") {
+        // App was unsuspended - clear the suspended flag
+        const now = new Date();
+
+        const updatedInstallations = await db
+          .update(githubAppInstallation)
+          .set({
+            suspended: false,
+            suspendedAt: null,
+            updatedAt: now,
+          })
+          .where(eq(githubAppInstallation.installationId, input.installationId))
+          .returning();
+
+        logger.info("GitHub installation unsuspended", {
+          action: "github_webhook_unsuspend",
+          installationId: input.installationId,
+        });
+
+        return {
+          success: true,
+          action: "unsuspended",
+          updatedCount: updatedInstallations.length,
+        };
+      }
+
+      // For "created" and "new_permissions_accepted", we just acknowledge
+      // The user flow already handles storing installation on the callback
+      logger.info(`GitHub installation webhook received: ${input.action}`, {
+        action: `github_webhook_${input.action}`,
+        installationId: input.installationId,
+      });
+
+      return {
+        success: true,
+        action: input.action,
+      };
+    }),
+
+  // ============================================================================
+  // AGENT LOOP CALLBACK
+  // Called by Cloudflare worker when a sandbox run completes or fails
+  // ============================================================================
+
+  /**
+   * Process agent loop run callback from Cloudflare worker
+   * Updates run status, loop counters, and triggers next run if automated
+   */
+  processAgentLoopCallback: internalProcedure
+    .input(agentLoopWebhookSchema)
+    .mutation(async ({ input }) => {
+
+      try{
+
+      console.log("Processing agent loop callback", {
+        action: "agent_loop_callback",
+        input: input,
+      });
+
+      // Get the run with its loop
+      const run = await db.query.agentLoopRun.findFirst({
+        where: eq(agentLoopRun.id, input.runId),
+        with: {
+          loop: true,
+        },
+      });
+
+      if (!run) {
+        logger.warn("Agent loop callback: run not found", {
+          action: "agent_loop_callback_not_found",
+          runId: input.runId,
+        });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Run not found",
+        });
+      }
+
+      // Check if run is in a state that can be updated
+      if (run.status !== "running" && run.status !== "pending") {
+        logger.warn("Agent loop callback: run already completed", {
+          action: "agent_loop_callback_already_done",
+          runId: input.runId,
+          status: run.status,
+        });
+        return {
+          success: true,
+          message: "Run already completed, callback ignored",
+        };
+      }
+
+      const loop = run.loop;
+      const now = new Date();
+      const durationSeconds = Math.round((now.getTime() - run.startedAt.getTime()) / 1000);
+
+      if (input.success) {
+        // Update run as completed
+        await db
+          .update(agentLoopRun)
+          .set({
+            status: "completed",
+            completedAt: now,
+            durationSeconds,
+            sandboxId: input.sandboxId,
+            commitSha: input.commitSha,
+            commitMessage: input.commitMessage,
+          })
+          .where(eq(agentLoopRun.id, input.runId));
+
+        if (input.isListComplete) {
+          await db
+            .update(agentLoop)
+            .set({
+              status: "completed" as const,
+            })
+            .where(eq(agentLoop.id, loop.id));
+            
+          return {
+            success: true,
+            message: "Run completed, loop is complete",
+          };
+        }
+
+        // Update loop counters
+
+        // Check if this is the last iteration
+        // Use run.runNumber instead of loop.totalRuns to handle restart scenarios correctly
+        const isLastIteration = run.runNumber >= loop.maxRuns;
+
+        await db
+          .update(agentLoop)
+          .set({
+            successfulRuns: loop.successfulRuns + 1,
+            lastRunId: input.runId,
+            lastRunAt: now,
+            updatedAt: now,
+            // Mark loop as completed if agent says so
+            ...(isLastIteration ? { status: "completed" as const } : {}),
+          })
+          .where(eq(agentLoop.id, loop.id));
+
+        logger.info("Agent loop run completed successfully", {
+          action: "agent_loop_run_complete",
+          loopId: loop.id,
+          runId: input.runId,
+          runNumber: run.runNumber,
+          commitSha: input.commitSha,
+          durationSeconds,
+        });
+
+        // Trigger next run if automation is enabled and not complete
+        if (loop.automationEnabled && !isLastIteration) {
+          // Create next pending run with the same AI config as the completed run
+          const nextRunNumber = run.runNumber + 1; // Next run after the completing one
+          const [newRun] = await db
+            .insert(agentLoopRun)
+            .values({
+              loopId: loop.id,
+              runNumber: nextRunNumber,
+              status: "pending",
+              triggerType: "automated",
+              modelProviderId: run.modelProviderId,
+              modelId: run.modelId,
+            })
+            .returning();
+
+          if (!newRun) {
+            logger.error("Failed to create next automated run", {
+              action: "automated_run_creation_failed",
+              loopId: loop.id,
+              runNumber: nextRunNumber,
+            });
+
+            return {
+              success: false,
+              message: "Failed to create next automated run",
+            };
+          }
+
+          // Resolve model provider and model names from UUIDs for the service
+          const [providerRecord] = await db
+            .select()
+            .from(modelProvider)
+            .where(eq(modelProvider.id, run.modelProviderId));
+
+          const [modelRecord] = await db
+            .select()
+            .from(model)
+            .where(eq(model.id, run.modelId));
+
+          if (!providerRecord || !modelRecord) {
+            logger.error("Model provider or model not found", {
+              action: "model_lookup_failed",
+              loopId: loop.id,
+            });
+
+            return {
+              success: false,
+              message: "Model provider or model not found",
+            };
+          }
+
+          // Get the credential for this automated run
+          const credService = getModelCredentialsService();
+          let credential: import("../../providers/compute").SandboxCredential = {
+            type: "api_key",
+            apiKey: "", // Default empty for free models
+          };
+
+          // Only require credential for non-free models
+          if (!modelRecord.isFree) {
+            if (!loop.credentialId) {
+              logger.error("No credential configured for automated run", {
+                action: "credential_missing",
+                loopId: loop.id,
+              });
+
+              // Mark the run as failed so it doesn't stay pending forever
+              await db
+                .update(agentLoopRun)
+                .set({
+                  status: "failed",
+                  completedAt: new Date(),
+                  errorMessage: "No API key configured for this loop. Please update the loop settings or recreate it.",
+                })
+                .where(eq(agentLoopRun.id, newRun.id));
+
+              return {
+                success: false,
+                message: "No credential configured for automated run",
+              };
+            }
+
+            credential = await credService.getCredentialForRun(
+              loop.credentialId,
+              loop.userId,
+              { loopId: loop.id, runId: newRun.id },
+            );
+          }
+
+          const service = getAgentLoopService();
+          const startResult = await service.startRunAsync({
+            loopId: loop.id,
+            runId: newRun.id,
+            provider: providerRecord.name,
+            modelId: modelRecord.modelId,
+            credential,
+            prompt: loop.prompt || undefined,
+          });
+
+          if (!startResult.success) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: startResult.error || "Failed to start run",
+            });
+          }
+
+          await db
+            .update(agentLoop)
+            .set({
+              totalRuns: nextRunNumber, // Use the new run number directly
+              lastRunId: newRun.id,
+            })
+            .where(eq(agentLoop.id, loop.id));
+
+          logger.info("Created next automated run", {
+            action: "automated_run_created",
+            loopId: loop.id,
+            runId: newRun?.id,
+            runNumber: nextRunNumber,
+          });
+
+          return {
+            success: true,
+            message: "Run completed, next run created",
+            nextRunId: newRun?.id,
+          };
+        }
+
+        return {
+          success: true,
+          message: "Run completed, plan is complete",
+        };
+      } else {
+        // Update run as failed
+        await db
+          .update(agentLoopRun)
+          .set({
+            status: "failed",
+            completedAt: now,
+            durationSeconds,
+            sandboxId: input.sandboxId,
+            errorMessage: input.error,
+          })
+          .where(eq(agentLoopRun.id, input.runId));
+
+        // Update loop counters
+        // Note: totalRuns was already incremented when the run was created, so don't increment again
+        await db
+          .update(agentLoop)
+          .set({
+            failedRuns: loop.failedRuns + 1,
+            lastRunId: input.runId,
+            lastRunAt: now,
+            updatedAt: now,
+          })
+          .where(eq(agentLoop.id, loop.id));
+
+        logger.error("Agent loop run failed", {
+          action: "agent_loop_run_failed",
+          loopId: loop.id,
+          runId: input.runId,
+          runNumber: run.runNumber,
+          error: input.error,
+        });
+
+        // TODO: Send email notification about failure
+
+        return {
+          success: true,
+          message: "Run failure recorded",
+        };
+      } 
+    } catch (error) {
+        logger.error("Failed to process agent loop callback", {
+          action: "agent_loop_callback_failed",
+          runId: input.runId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to process agent loop callback",
+        });
+      }
+    }),
 });
 
 export type InternalRouter = typeof internalRouter;
-

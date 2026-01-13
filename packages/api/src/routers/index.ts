@@ -1,5 +1,6 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
 import { railwayWebhookRouter } from "./railway/webhook";
+import { githubWebhookRouter } from "./github/webhook";
 import { workspaceRouter } from "./workspace/managment";
 import { workspaceEventsRouter } from "./workspace/events";
 import { workspaceOperationsRouter } from "./workspace/operations";
@@ -11,33 +12,41 @@ import { agentRouter } from "./agent";
 import { userRouter } from "./user/user";
 import { deviceRouter } from "./device";
 import { adminRouter } from "./admin";
+import { agentLoopRouter } from "./agent-loop";
+import { agentLoopWebhookRouter } from "./agent-loop/webhook";
+import { modelCredentialsRouter } from "./model-credentials";
 
 export const appRouter = router({
-	healthCheck: publicProcedure.query(() => {
-		return "OK";
-	}),
-	privateData: protectedProcedure.query(({ ctx }) => {
-		return {
-			message: "This is private",
-			user: ctx.session.user,
-		};
-	}),
-	user: userRouter,
-	workspace: workspaceRouter,
-	internal: internalRouter,
-	github: githubRouter,
-	tunnel: tunnelRouter,
-	agent: agentRouter,
-	device: deviceRouter,
-	admin: adminRouter,
-	workspaceOps: workspaceOperationsRouter, // Workspace-authenticated operations
+  healthCheck: publicProcedure.query(() => {
+    return "OK";
+  }),
+  privateData: protectedProcedure.query(({ ctx }) => {
+    return {
+      message: "This is private",
+      user: ctx.session.user,
+    };
+  }),
+  user: userRouter,
+  workspace: workspaceRouter,
+  internal: internalRouter,
+  github: githubRouter,
+  tunnel: tunnelRouter,
+  agent: agentRouter,
+  device: deviceRouter,
+  admin: adminRouter,
+  agentLoop: agentLoopRouter,
+  modelCredentials: modelCredentialsRouter,
+  workspaceOps: workspaceOperationsRouter, // Workspace-authenticated operations
 });
 export type AppRouter = typeof appRouter;
 
 export const listenerRouter = router({
-	railway: railwayWebhookRouter,
-	workspace: workspaceEventsRouter,
+  railway: railwayWebhookRouter,
+  github: githubWebhookRouter,
+  workspace: workspaceEventsRouter,
+  agentLoop: agentLoopWebhookRouter,
 });
+
 export type ListenerRouter = typeof listenerRouter;
 
 export { proxyResolverRouter };
