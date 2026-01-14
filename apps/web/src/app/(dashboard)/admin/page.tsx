@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardHeader, DashboardShell } from "@/components/dashboard/shell";
 import { Button } from "@/components/ui/button";
 import { Users, Server, Image, Globe, ChevronRight, Settings } from "lucide-react";
@@ -7,13 +9,42 @@ import Link from "next/link";
 import { trpcClient } from "@/utils/trpc";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { authClient } from "@/lib/auth-client";
 import type { Route } from "next";
 
 export default function AdminPage() {
+  const router = useRouter();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
+
+  useEffect(() => {
+    if (!isSessionPending) {
+      if (!session?.user) {
+        router.push("/login");
+        return;
+      }
+      const userRole = (session.user as any)?.role;
+      if (userRole !== "admin") {
+        router.push("/dashboard");
+        return;
+      }
+    }
+  }, [session, isSessionPending, router]);
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ["admin", "stats"],
     queryFn: () => trpcClient.admin.users.stats.query(),
   });
+
+  // Don't render content if not authenticated or not admin (will redirect)
+  if (isSessionPending || !session?.user || (session.user as any)?.role !== "admin") {
+    return (
+      <DashboardShell>
+        <div className="flex h-64 items-center justify-center">
+          <Skeleton className="h-8 w-48" />
+        </div>
+      </DashboardShell>
+    );
+  }
 
   const navItems = [
     {

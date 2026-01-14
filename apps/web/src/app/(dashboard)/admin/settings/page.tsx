@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardHeader, DashboardShell } from "@/components/dashboard/shell";
+import { authClient } from "@/lib/auth-client";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Settings, Save } from "lucide-react";
 import { trpcClient } from "@/utils/trpc";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,9 +25,25 @@ interface SettingValue {
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const queryClient = useQueryClient();
   const [formValues, setFormValues] = useState<Record<string, number>>({});
   const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    if (!isSessionPending) {
+      if (!session?.user) {
+        router.push("/login");
+        return;
+      }
+      const userRole = (session.user as any)?.role;
+      if (userRole !== "admin") {
+        router.push("/dashboard");
+        return;
+      }
+    }
+  }, [session?.user, isSessionPending]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "settings"],
@@ -80,6 +98,17 @@ export default function SettingsPage() {
       setHasChanges(false);
     }
   };
+
+  // Don't render content if not authenticated or not admin (will redirect)
+  if (isSessionPending || !session?.user || (session.user as any)?.role !== "admin") {
+    return (
+      <DashboardShell>
+        <div className="flex h-64 items-center justify-center">
+          <Skeleton className="h-8 w-48" />
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
     <DashboardShell>

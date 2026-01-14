@@ -6,8 +6,25 @@ import { GitHubConnection } from "@/components/dashboard/github-connection";
 import { IntegrationCallbackHandler } from "@/components/dashboard/integrations/integration-callback-handler";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { GitBranch, Lock } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+
+function GitHubConnectionSkeleton() {
+  return (
+    <Card className="border-border/50 bg-card/50">
+      <CardHeader>
+        <Skeleton className="h-6 w-48 mb-2" />
+        <Skeleton className="h-4 w-96" />
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-center py-8">
+          <Skeleton className="h-6 w-6" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function GitlabIcon({ className }: { className?: string }) {
   return (
@@ -119,8 +136,9 @@ export default async function IntegrationsPage() {
               <h2 className="text-lg font-medium">Available</h2>
               <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">1</Badge>
             </div>
-            {/* GitHubConnection is already a client component */}
-            <GitHubConnection />
+            <Suspense fallback={<GitHubConnectionSkeleton />}>
+              <GitHubConnection />
+            </Suspense>
           </section>
 
           <section className="space-y-4">

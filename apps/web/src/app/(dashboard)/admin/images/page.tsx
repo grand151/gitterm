@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardHeader, DashboardShell } from "@/components/dashboard/shell";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,8 +34,24 @@ import { toast } from "sonner";
 import Link from "next/link";
 
 export default function ImagesPage() {
+  const router = useRouter();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isSessionPending) {
+      if (!session?.user) {
+        router.push("/login");
+        return;
+      }
+      const userRole = (session.user as any)?.role;
+      if (userRole !== "admin") {
+        router.push("/dashboard");
+        return;
+      }
+    }
+  }, [session?.user, isSessionPending]);
   const [newImage, setNewImage] = useState({ name: "", imageId: "", agentTypeId: "" });
 
   const { data: images, isLoading } = useQuery({
@@ -67,6 +85,17 @@ export default function ImagesPage() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  // Don't render content if not authenticated or not admin (will redirect)
+  if (isSessionPending || !session?.user || (session.user as any)?.role !== "admin") {
+    return (
+      <DashboardShell>
+        <div className="flex h-64 items-center justify-center">
+          <Skeleton className="h-8 w-48" />
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
     <DashboardShell>

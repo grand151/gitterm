@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardHeader, DashboardShell } from "@/components/dashboard/shell";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,8 +58,24 @@ const initialCreateForm: CreateUserForm = {
 };
 
 export default function UsersPage() {
+  const router = useRouter();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!isSessionPending) {
+      if (!session?.user) {
+        router.push("/login");
+        return;
+      }
+      const userRole = (session.user as any)?.role;
+      if (userRole !== "admin") {
+        router.push("/dashboard");
+        return;
+      }
+    }
+  }, [session?.user, isSessionPending]);
   const [page, setPage] = useState(0);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -124,6 +142,17 @@ export default function UsersPage() {
 
   const totalPages = Math.ceil((data?.total ?? 0) / limit);
   const canCreateUsers = config?.auth.canCreateUsers ?? false;
+
+  // Don't render content if not authenticated or not admin (will redirect)
+  if (isSessionPending || !session?.user || (session.user as any)?.role !== "admin") {
+    return (
+      <DashboardShell>
+        <div className="flex h-64 items-center justify-center">
+          <Skeleton className="h-8 w-48" />
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
     <DashboardShell>
