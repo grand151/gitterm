@@ -118,8 +118,7 @@
 			header_up X-Routing-Mode path
 
 			# Modify CSP header to allow data URIs for WebAssembly
-			@has_csp header_regexp Content-Security-Policy .*
-			handle_response @has_csp {
+			handle_response {
 				header Content-Security-Policy "default-src 'self'; connect-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:;"
 			}
 
@@ -154,8 +153,7 @@
 				header_up Cookie {header.Cookie}
 
 				# Modify CSP header to allow data URIs for WebAssembly
-				@has_csp header_regexp Content-Security-Policy .*
-				handle_response @has_csp {
+				handle_response {
 					header Content-Security-Policy "default-src 'self'; connect-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:;"
 				}
 
