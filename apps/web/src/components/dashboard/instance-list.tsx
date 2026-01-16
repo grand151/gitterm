@@ -424,7 +424,7 @@ function InstanceCard({
                   asChild
                 >
                   <a
-                    href={`https://app.opencode.ai/?url=${workspaceUrl}`}
+                    href={workspaceUrl}
                     target="_blank"
                     rel="noreferrer"
                   >
