@@ -133,6 +133,12 @@
 			header_up X-Hosting-Type {header.X-Hosting-Type}
 			header_up X-Routing-Mode path
 
+			# Modify CSP header to allow data URIs for WebAssembly
+			@has_csp header_regexp Content-Security-Policy .*
+			handle_response @has_csp {
+				header Content-Security-Policy "default-src 'self'; connect-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:;"
+			}
+
 			transport http {
 				compression off
 				dial_timeout 10s
@@ -163,6 +169,12 @@
 				header_up User-Agent {header.User-Agent}
 				header_up Cookie {header.Cookie}
 
+				# Modify CSP header to allow data URIs for WebAssembly
+				@has_csp header_regexp Content-Security-Policy .*
+				handle_response @has_csp {
+					header Content-Security-Policy "default-src 'self'; connect-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:;"
+				}
+				
 				transport http {
 					compression off
 					dial_timeout 10s
