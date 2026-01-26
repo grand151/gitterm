@@ -19,7 +19,7 @@
 # All services behind a single domain - no cross-origin issues.
 # Similar to local development (Caddyfile.local) but for Railway.
 #
-# URL Structure:
+# URL Structure (ROUTING_MODE=path):
 # - /*              -> Web app (Next.js) - DEFAULT
 # - /api/*          -> API server
 # - /api/trpc/*     -> API server tRPC (strip /api prefix)
@@ -27,12 +27,17 @@
 # - /tunnel/*       -> Tunnel-proxy (agent WebSocket connections)
 # - /ws/{subdomain}/* -> Workspace traffic (path-based routing)
 #
+# URL Structure (ROUTING_MODE=subdomain):
+# - <port>-<subdomain>.<BASE_DOMAIN> -> Workspace traffic (subdomain routing)
+#
 # Environment Variables:
 # - WEB_URL         -> e.g., web.railway.internal:8080 or public URL
 # - SERVER_URL      -> e.g., server.railway.internal:8080 or public URL  
 # - LISTENER_URL    -> e.g., listener.railway.internal:8080 or public URL
 # - TUNNEL_PROXY_URL -> e.g., tunnel.railway.internal:8080 or public URL
 # - INTERNAL_API_KEY -> Shared key for internal API calls
+# - ROUTING_MODE    -> path | subdomain
+# - BASE_DOMAIN     -> e.g., gitterm.dev
 #
 # IMPORTANT: For Railway internal networking, service names must match exactly.
 # The format is: <service-name>.railway.internal (no port needed for internal)
@@ -42,6 +47,14 @@
 	handle /health {
 		header Content-Type application/json
 		respond `{"status":"UP","mode":"railway"}` 200
+	}
+
+	# Block reserved subdomains at the Caddy level (defense in depth)
+	@reserved_subdomain header_regexp subdomain Host ^(api|tunnel)\.{$BASE_DOMAIN}$|^\d+-(api|tunnel)\.{$BASE_DOMAIN}$
+	handle @reserved_subdomain {
+		root * /srv/errors
+		rewrite * /unavailable.html
+		file_server
 	}
 
 	# Debug endpoint - shows env var values (remove in production)
@@ -93,12 +106,16 @@
 	}
 
 	# ============================================
-	# PATH-BASED WORKSPACE ROUTING: /ws/{subdomain}/*
+	# PATH-BASED WORKSPACE ROUTING (ROUTING_MODE=path): /ws/{subdomain}/*
 	# Routes workspace traffic based on hosting type:
 	# - local: tunnel-proxy (TUNNEL_PROXY_URL)
 	# - cloud: Railway container URL (with path prefix stripped)
 	# ============================================
-	handle /ws/* {
+	@path_mode_ws {
+		path /ws/*
+		expression {env.ROUTING_MODE} == "path"
+	}
+	handle @path_mode_ws {
 		# Forward auth to API server (validates workspace exists and user has access)
 		forward_auth {$SERVER_URL} {
 			uri /api/internal/proxy-resolve
@@ -179,6 +196,93 @@
 					keepalive 2m
 					keepalive_idle_conns 10
 				}
+			}
+		}
+	}
+
+	# ============================================
+	# SUBDOMAIN WORKSPACE ROUTING (ROUTING_MODE=subdomain): <port>-<subdomain>.<BASE_DOMAIN>
+	# Routes workspace traffic based on hosting type:
+	# - local: tunnel-proxy (TUNNEL_PROXY_URL)
+	# - cloud: Railway container URL
+	# ============================================
+	@subdomain_mode_ws {
+		host_regexp portsub ^(\d+)-([a-z0-9-]+)\.{$BASE_DOMAIN}$
+		expression {env.ROUTING_MODE} == "subdomain"
+	}
+	handle @subdomain_mode_ws {
+		# Forward auth to API server (validates workspace exists and user has access)
+		forward_auth {$SERVER_URL} {
+			uri /api/internal/proxy-resolve
+
+			copy_headers X-Hosting-Type X-Workspace-ID X-User-ID X-Subdomain X-Upstream-URL X-Container-Host X-Container-Port X-Container-Protocol
+
+			header_up Host {host}
+			header_up X-Requested-Port {http.regexp.portsub.1}
+			header_up X-Subdomain {http.regexp.portsub.2}
+			header_up X-Internal-Key {$INTERNAL_API_KEY}
+			header_up Cookie {header.Cookie}
+			header_up Authorization {header.Authorization}
+			header_up X-Original-URI {uri}
+			header_up X-Original-Method {method}
+			header_up X-Forwarded-For {remote_ip}
+			header_up X-Routing-Mode subdomain
+		}
+
+		# Local workspaces: route to tunnel-proxy
+		@local_workspace header X-Hosting-Type local
+		reverse_proxy @local_workspace {$TUNNEL_PROXY_URL} {
+			header_up Upgrade {header.Upgrade}
+			header_up Connection {header.Connection}
+			header_up Sec-WebSocket-Key {header.Sec-WebSocket-Key}
+			header_up Sec-WebSocket-Version {header.Sec-WebSocket-Version}
+			header_up Sec-WebSocket-Protocol {header.Sec-WebSocket-Protocol}
+			header_up Sec-WebSocket-Extensions {header.Sec-WebSocket-Extensions}
+			header_up Host {host}
+			header_up X-Real-IP {remote_ip}
+			header_up X-Forwarded-For {remote_ip}
+			header_up X-User-Agent {header.User-Agent}
+			header_up Cookie {header.Cookie}
+			header_up X-Subdomain {header.X-Subdomain}
+			header_up X-Hosting-Type {header.X-Hosting-Type}
+			header_up X-Routing-Mode subdomain
+
+			header_down Content-Security-Policy "default-src 'self'; connect-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:;"
+
+			transport http {
+				compression off
+				dial_timeout 10s
+				response_header_timeout 0
+				expect_continue_timeout 0
+				keepalive 2m
+				keepalive_idle_conns 10
+			}
+		}
+
+		# Cloud workspaces: route to container
+		@cloud_workspace header X-Hosting-Type cloud
+		reverse_proxy @cloud_workspace {header.X-Container-Host}:{header.X-Container-Port} {
+			header_up Upgrade {header.Upgrade}
+			header_up Connection {header.Connection}
+			header_up Sec-WebSocket-Key {header.Sec-WebSocket-Key}
+			header_up Sec-WebSocket-Version {header.Sec-WebSocket-Version}
+			header_up Sec-WebSocket-Protocol {header.Sec-WebSocket-Protocol}
+			header_up Sec-WebSocket-Extensions {header.Sec-WebSocket-Extensions}
+			header_up Host {header.X-Container-Host}
+			header_up X-Real-IP {remote_ip}
+			header_up X-Forwarded-For {remote_ip}
+			header_up User-Agent {header.User-Agent}
+			header_up Cookie {header.Cookie}
+
+			header_down Content-Security-Policy "default-src 'self'; connect-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:;"
+
+			transport http {
+				compression off
+				dial_timeout 10s
+				response_header_timeout 0
+				expect_continue_timeout 0
+				keepalive 2m
+				keepalive_idle_conns 10
 			}
 		}
 	}
