@@ -2,7 +2,7 @@ import { db, eq } from "./index";
 import { agentType, cloudProvider, image, region } from "./schema/cloud";
 import { modelProvider, model } from "./schema/model-credentials";
 import { providerType, providerConfigField } from "./schema/provider-config";
-import { PROVIDER_DEFINITIONS } from "@gitterm/schema/provider-registry";
+import { PROVIDER_DEFINITIONS } from "@gitterm/schema";
 
 /**
  * Seed data definitions

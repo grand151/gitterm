@@ -29,6 +29,7 @@ COPY --from=builder /app/packages/db ./packages/db
 COPY --from=builder /app/packages/auth ./packages/auth
 COPY --from=builder /app/packages/env ./packages/env
 COPY --from=builder /app/packages/config ./packages/config
+COPY --from=builder /app/packages/schema ./packages/schema
 
 # Copy built server output
 COPY --from=builder /app/apps/server/dist ./apps/server/dist

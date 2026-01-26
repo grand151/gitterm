@@ -6,9 +6,8 @@ import { cloudProvider } from "@gitterm/db/schema/cloud"
 import {
   getProviderDefinition,
   validateProviderConfig,
-  type ProviderDefinition,
   type ProviderConfigField,
-} from "@gitterm/schema/provider-registry";
+} from "@gitterm/schema";
 
 export interface ProviderConfigInput {
   providerTypeId: string;

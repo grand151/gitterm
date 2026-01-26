@@ -18,7 +18,7 @@ import {
   type NewImage,
 } from "@gitterm/db/schema/cloud";
 import { getProviderConfigService } from "../../service/provider-config";
-import { getAllProviderDefinitions } from "@gitterm/schema/provider-registry";
+import { getAllProviderDefinitions } from "@gitterm/schema";
 import { providerType } from "@gitterm/db/schema/provider-config";
 
 // ============================================================================
