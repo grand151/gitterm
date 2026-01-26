@@ -21,7 +21,7 @@ import {
 } from "../../utils/metering";
 import { getProviderByCloudProviderId, type PersistentWorkspaceInfo } from "../../providers";
 import { WORKSPACE_EVENTS } from "../../events/workspace";
-import { getGitHubAppService } from "../../service/github";
+import { getGitHubAppService, isGitHubAppConfigured, parseGitHubRepoUrl } from "../../service/github";
 import { workspaceJWT } from "../../service/workspace-jwt";
 import { githubAppInstallation, gitIntegration } from "@gitterm/db/schema/integrations";
 import { sendAdminMessage } from "../../utils/discord";
@@ -945,6 +945,12 @@ export const workspaceRouter = router({
         let githubAppTokenExpiry: string | undefined;
 
         if (input.gitIntegrationId) {
+          if (!isGitHubAppConfigured()) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "GitHub App is not configured for this deployment",
+            });
+          }
           const [gitIntegrationRecord] = await db
             .select()
             .from(gitIntegration)
@@ -988,31 +994,41 @@ export const workspaceRouter = router({
           }
         }
 
-        if(input.repo) {
-          const options = input.gitIntegrationId ? { userId: userId, gitIntegrationId: input.gitIntegrationId } : undefined;
-          const repoValidation = await getGitHubAppService().checkIfValidRepository(input.repo, options);
+        if (input.repo) {
+          if (!isGitHubAppConfigured()) {
+            const parsed = parseGitHubRepoUrl(input.repo);
+            if (!parsed) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Invalid repository URL",
+              });
+            }
+          } else {
+            const options = input.gitIntegrationId ? { userId: userId, gitIntegrationId: input.gitIntegrationId } : undefined;
+            const repoValidation = await getGitHubAppService().checkIfValidRepository(input.repo, options);
 
-          if(!repoValidation.valid) 
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "Invalid repository URL",
-            });
-          
-          if(!repoValidation.exists) 
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "Can't access repository, check URL or github integration",
-            });
+            if (!repoValidation.valid)
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Invalid repository URL",
+              });
 
-          if(!repoValidation.canClone)
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "Can't clone repository, check github integration",
-            });
+            if (!repoValidation.exists)
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Can't access repository, check URL or github integration",
+              });
+
+            if (!repoValidation.canClone)
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Can't clone repository, check github integration",
+              });
+          }
         }
 
         // Parse repo URL to get owner/name (only for cloud workspaces)
-        const repoInfo = input.repo ? getGitHubAppService().parseRepoUrl(input.repo) : null;
+        const repoInfo = input.repo ? parseGitHubRepoUrl(input.repo) : null;
 
         // Generate or validate subdomain
         let subdomain: string;

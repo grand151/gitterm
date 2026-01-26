@@ -1073,22 +1073,7 @@ export class GitHubAppService {
    * Parse repository URL to extract owner and repo name
    */
   parseRepoUrl(url: string): { owner: string; repo: string } | null {
-    // Handle various GitHub URL formats:
-    // https://github.com/owner/repo
-    // https://github.com/owner/repo.git
-    // git@github.com:owner/repo.git
-
-    const httpsMatch = url.match(/github\.com\/([^\/]+)\/([^\/\.]+)(\.git)?$/);
-    if (httpsMatch) {
-      return { owner: httpsMatch[1]!, repo: httpsMatch[2]! };
-    }
-
-    const sshMatch = url.match(/git@github\.com:([^\/]+)\/([^\/\.]+)(\.git)?$/);
-    if (sshMatch) {
-      return { owner: sshMatch[1]!, repo: sshMatch[2]! };
-    }
-
-    return null;
+    return parseGitHubRepoUrl(url);
   }
 }
 
@@ -1112,4 +1097,24 @@ export function getGitHubAppService(): GitHubAppService {
  */
 export function isGitHubAppConfigured(): boolean {
   return !!env.GITHUB_APP_ID && !!env.GITHUB_APP_PRIVATE_KEY;
+}
+
+export function parseGitHubRepoUrl(url: string): { owner: string; repo: string } | null {
+  // Handle various GitHub URL formats:
+  // https://github.com/owner/repo
+  // https://github.com/owner/repo.git
+  // git@github.com:owner/repo.git
+  const cleaned = url.trim();
+
+  const httpsMatch = cleaned.match(/github\.com\/([^\/]+)\/([^\/\.]+)(\.git)?$/);
+  if (httpsMatch) {
+    return { owner: httpsMatch[1]!, repo: httpsMatch[2]! };
+  }
+
+  const sshMatch = cleaned.match(/git@github\.com:([^\/]+)\/([^\/\.]+)(\.git)?$/);
+  if (sshMatch) {
+    return { owner: sshMatch[1]!, repo: sshMatch[2]! };
+  }
+
+  return null;
 }
