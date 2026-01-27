@@ -36,6 +36,8 @@ Set these per provider in the admin panel:
 - **Railway**
   - Required: API URL, API Token, Project ID, Environment ID
   - Optional: Default Region, Public Railway Domains
+  - Deployment Webhook: Connect your proxy url to listen to railway webhooks using the link `https://{caddy-proxy-domain}/listener/trpc/railway.handleWebhook`, and make sure to have these events accepted `Deployment Failed`, `Deployment Deploying`, `Deployment Slept`, `Deployment Deployed`.
+
 
 - **Cloudflare Sandbox**
   - Required: Worker URL, Callback Secret
