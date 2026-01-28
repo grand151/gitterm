@@ -32,6 +32,8 @@ import {
   type UserPlan,
 } from "../../config/features";
 import { getProviderConfigService } from "../../service/provider-config";
+import { modelProvider, userModelCredential } from "@gitterm/db/schema/model-credentials";
+import { getModelCredentialsService } from "../../service/model-credentials";
 
 // Reserved subdomains that cannot be used by users
 const RESERVED_SUBDOMAINS = [
@@ -1135,6 +1137,35 @@ export const workspaceRouter = router({
           username: `Gitterm: ${fetchedUser.name}`,
         };
 
+        const credService = getModelCredentialsService();
+        const userCredentials = await db.select().from(userModelCredential).where(eq(userModelCredential.userId, userId)).leftJoin(modelProvider, eq(userModelCredential.providerId, modelProvider.id))
+
+        const credentialsEntries = (await Promise.all(
+          userCredentials.map(async (cred) => {
+            const decryptedCred = await credService.getUserCredentialForProvider(
+              userId,
+              cred.model_provider?.name as string,
+            );
+            if (!decryptedCred) return null;
+        
+            const providerName =
+              decryptedCred.providerName === "openai-codex" ? "openai" : decryptedCred.providerName;
+        
+            return [providerName, {
+              type: decryptedCred.credential.type === "api_key" ? "api" : "oauth",
+              key: decryptedCred.credential.type === "api_key" ? decryptedCred.credential.apiKey : undefined,
+              refresh: decryptedCred.credential.type === "oauth" ? decryptedCred.credential.refresh : undefined,
+              access: decryptedCred.credential.type === "oauth" ? decryptedCred.credential.access : undefined,
+              expires: decryptedCred.credential.type === "oauth" ? decryptedCred.credential.expires : undefined,
+              accountId: decryptedCred.credential.type === "oauth" ? decryptedCred.credential.accountId : undefined,
+            }];
+          })
+        )).filter((entry): entry is [string, any] => entry !== null) // Type guard
+
+        const OPENCODE_CREDENTIALS = Object.fromEntries(credentialsEntries);
+
+        const OPENCODE_CREDENTIALS_BASE64 = Buffer.from(JSON.stringify(OPENCODE_CREDENTIALS)).toString("base64");
+
         const DEFAULT_DOCKER_ENV_VARS = {
           REPO_URL: input.repo || undefined,
           OPENCODE_CONFIG_BASE64: agentConfig
@@ -1145,6 +1176,7 @@ export const workspaceRouter = router({
                 }),
               ).toString("base64")
             : Buffer.from(JSON.stringify(DEFAULT_OPENCODE_CONFIG)).toString("base64"),
+          OPENCODE_CREDENTIALS_BASE64: OPENCODE_CREDENTIALS_BASE64,
           USER_GITHUB_USERNAME: githubUsername,
           GITHUB_APP_TOKEN: githubAppToken,
           GITHUB_APP_TOKEN_EXPIRY: githubAppTokenExpiry,
@@ -1600,7 +1632,7 @@ export const workspaceRouter = router({
     }),
 
   openWorkspacePort: protectedProcedure
-    .input(z.object({ workspaceId: z.string(), port: z.number(), description: z.string().optional() }))
+    .input(z.object({ workspaceId: z.string(), port: z.number(), name: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const userId = ctx.session.user.id;
 
@@ -1634,7 +1666,7 @@ export const workspaceRouter = router({
           ...(fetchedWorkspace.exposedPorts ?? {}),
           [input.port]: {
             port: input.port,
-            description: input.description,
+            name: input.name,
             upstreamUrl: domain,
             externalPortDomainId,
           },

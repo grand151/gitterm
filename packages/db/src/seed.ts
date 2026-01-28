@@ -103,7 +103,7 @@ const seedModelProviders = [
     oauthConfig: null,
   },
   {
-    name: "opencode-zen",
+    name: "opencode",
     displayName: "OpenCode Zen",
     authType: "api_key",
     plugin: null,
@@ -220,33 +220,25 @@ const seedModels = [
   },
   // OpenCode models
   {
-    providerName: "opencode-zen",
-    name: "glm-4.7-free",
-    displayName: "GLM 4.7 Free",
-    modelId: "opencode/glm-4.7-free",
-    isFree: true,
-    isRecommended: true,
-  },
-  {
-    providerName: "opencode-zen",
+    providerName: "opencode",
     name: "gpt-5.1-codex",
     displayName: "GPT-5.1 Codex",
     modelId: "opencode/gpt-5.1-codex",
   },
   {
-    providerName: "opencode-zen",
+    providerName: "opencode",
     name: "gpt-5.2",
     displayName: "GPT-5.2",
     modelId: "opencode/gpt-5.2",
   },
   {
-    providerName: "opencode-zen",
+    providerName: "opencode",
     name: "gemini-3-pro",
     displayName: "Gemini 3 Pro",
     modelId: "opencode/gemini-3-pro",
   },
   {
-    providerName: "opencode-zen",
+    providerName: "opencode",
     name: "claude-opus-4-5",
     displayName: "Claude Opus 4.5",
     modelId: "opencode/claude-opus-4-5",
@@ -465,7 +457,7 @@ export async function seedDatabase(): Promise<void> {
         name: m.name,
         displayName: m.displayName,
         modelId: m.modelId,
-        isFree: m.isFree ?? false,
+        isFree: false,
         isEnabled: true,
         isRecommended: m.isRecommended ?? false,
       });

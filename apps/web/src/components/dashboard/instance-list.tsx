@@ -371,7 +371,7 @@ function InstanceCard({
               openWorkspacePortMutation.mutate({
                 workspaceId: workspace.id,
                 port: p,
-                description: openPortForm.name.trim() || undefined,
+                name: openPortForm.name.trim() || undefined,
               });
             }}
           >
