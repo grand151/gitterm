@@ -104,11 +104,11 @@ export function CreateLocalInstance({ onSuccess, onCancel }: CreateLocalInstance
             Reach out to an administrator to enable local tunnels.
           </p>
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button
             variant="outline"
             onClick={onCancel}
-            className="border-border/50 hover:bg-secondary/50"
+            className="w-full border-border/50 hover:bg-secondary/50 sm:w-auto"
           >
             Cancel
           </Button>
@@ -216,19 +216,19 @@ export function CreateLocalInstance({ onSuccess, onCancel }: CreateLocalInstance
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button
           variant="outline"
           onClick={onCancel}
           disabled={isSubmitting}
-          className="border-border/50 hover:bg-secondary/50"
+          className="w-full border-border/50 hover:bg-secondary/50 sm:w-auto"
         >
           Cancel
         </Button>
         <Button
           onClick={handleSubmit}
           disabled={isSubmitting || !isValid}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
         >
           {isSubmitting ? (
             <>

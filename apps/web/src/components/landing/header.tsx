@@ -51,9 +51,8 @@ export function LandingHeader() {
               <Button
                 variant="outline"
                 size="sm"
-                className="border-border text-foreground hover:bg-secondary bg-transparent px-2 sm:px-3"
-              >
-                <Star className="h-3.5 w-3.5 shrink-0 sm:mr-1.5 group-hover/github:text-yellow-500" />
+                className="border border-border text-foreground bg-transparent px-2 sm:px-3 transition-colors hover:border-yellow-400 border-2">
+                <Star className="h-3.5 w-3.5 shrink-0 sm:mr-1.5 text-yellow-500" />
                 <span className="hidden sm:inline">Star on GitHub</span>
               </Button>
             </Link>

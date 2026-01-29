@@ -162,7 +162,7 @@ export function DashboardNav() {
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-accent/10 text-accent"
+                      ? "bg-secondary/70 text-foreground"
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
                   )}
                 >

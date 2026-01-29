@@ -186,7 +186,7 @@ export function CreateCloudInstance({ onSuccess, onCancel }: CreateCloudInstance
         </div>
 
         {/* Agent Type & Cloud Provider */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label className="text-sm font-medium">Agent Type</Label>
             <Select value={selectedAgentTypeId} onValueChange={setUserAgentTypeId}>
@@ -269,7 +269,7 @@ export function CreateCloudInstance({ onSuccess, onCancel }: CreateCloudInstance
         </div>
 
         {/* Region & Git Setup */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label className="text-sm font-medium">Region</Label>
             <Select
@@ -348,7 +348,7 @@ export function CreateCloudInstance({ onSuccess, onCancel }: CreateCloudInstance
           </div>
 
           {/* Persistent Storage */}
-          <div className="flex items-start gap-3 col-span-2 p-4 rounded-lg bg-secondary/30 border border-border/50">
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-secondary/30 border border-border/50 sm:col-span-2">
             <Checkbox
               id="persistent"
               checked={persistent}
@@ -365,7 +365,7 @@ export function CreateCloudInstance({ onSuccess, onCancel }: CreateCloudInstance
             </div>
           </div>
 
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <div className="flex items-start justify-center gap-2 rounded-md border border-border/40 bg-secondary/20 px-2 py-1.5 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
               <p>
@@ -381,19 +381,19 @@ export function CreateCloudInstance({ onSuccess, onCancel }: CreateCloudInstance
         </div>
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button
           variant="outline"
           onClick={onCancel}
           disabled={isSubmitting}
-          className="border-border/50 hover:bg-secondary/50"
+          className="w-full border-border/50 hover:bg-secondary/50 sm:w-auto"
         >
           Cancel
         </Button>
         <Button
           onClick={handleSubmit}
           disabled={isSubmitting || !isValid}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
         >
           {isSubmitting ? (
             <>

@@ -65,7 +65,7 @@ export function WorkspaceTypeSelector({ value, onChange }: WorkspaceTypeSelector
   return (
     <div className="grid gap-2">
       <Label className="text-sm font-medium">Workspace Type</Label>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {workspaceOptions.map((option) => {
           const isSelected = value === option.type;
           return (
@@ -73,7 +73,7 @@ export function WorkspaceTypeSelector({ value, onChange }: WorkspaceTypeSelector
               key={option.type}
               type="button"
               onClick={() => onChange(option.type)}
-              className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
+              className={`flex items-start gap-3 p-4 rounded-lg border transition-all sm:items-center ${
                 isSelected
                   ? "border-accent bg-primary/10"
                   : "border-border/50 hover:border-border hover:bg-secondary"

@@ -22,38 +22,56 @@ export function HowItWorksSection() {
     <section id="how-it-works" className="border-t border-border py-20 md:py-32">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mb-16 text-center">
-          <h2 className="mb-4 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+          <p className="mb-3 inline-flex items-center rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             How it works
+          </p>
+          <h2 className="mb-4 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+            Launch an OpenCode workspace in minutes
           </h2>
           <p className="mx-auto max-w-lg text-lg text-muted-foreground">
-            Get your cloud workspace running in under a minute. No Docker, no config files, no
-            hassle.
+            Create a cloud or local setup without Docker or config files. We handle the infra so
+            you can focus on shipping.
           </p>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-3">
-          {steps.map((step) => (
-            <div key={step.number} className="relative">
-              <div className="mb-4 font-mono text-5xl font-bold text-primary">{step.number}</div>
-              <h3 className="mb-2 text-xl font-semibold text-foreground">{step.title}</h3>
-              <p className="text-muted-foreground leading-relaxed">{step.description}</p>
-            </div>
-          ))}
+        <div className="relative">
+          <div className="absolute left-8 right-8 top-7 hidden h-px bg-border md:block" />
+          <div className="grid gap-6 md:grid-cols-3">
+            {steps.map((step) => (
+              <div
+                key={step.number}
+                className="group relative z-10 rounded-2xl border border-border bg-background/70 p-6 shadow-sm backdrop-blur transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg"
+              >
+                <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full border border-border bg-secondary font-mono text-lg font-semibold text-primary">
+                  {step.number}
+                </div>
+                <h3 className="mb-2 text-xl font-semibold text-foreground">{step.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{step.description}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Local Tunnel Alternative */}
-        <div className="mt-16 rounded-lg border border-border bg-secondary/80 p-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+        <div className="mt-16 rounded-2xl border border-border bg-secondary/70 p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="text-xl font-semibold text-foreground mb-2">Prefer to run locally?</h3>
-              <p className="text-muted-foreground max-w-xl">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <p className="inline-flex items-center rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Local tunnel
+                </p>
+                <p className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-amber-200">
+                  Beta
+                </p>
+              </div>
+              <h3 className="mb-2 text-xl font-semibold text-foreground">Prefer to run locally?</h3>
+              <p className="max-w-xl text-muted-foreground">
                 Use our CLI to tunnel your local dev server. Get a public gitterm.dev URL without
                 deploying anything.
               </p>
             </div>
-            <div className="font-mono text-sm bg-background rounded-lg px-4 py-3 border border-border">
-              <span className="text-primary">$</span> npx gitterm tunnel
-              --w abc1234 --port 4096
+            <div className="rounded-lg border border-border bg-background px-4 py-3 font-mono text-sm">
+              <span className="text-primary">$</span> npx gitterm tunnel --w abc1234 --port 4096
             </div>
           </div>
         </div>

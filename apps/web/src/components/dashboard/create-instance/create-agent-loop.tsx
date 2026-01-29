@@ -320,11 +320,11 @@ export function CreateAgentLoop({ onSuccess, onCancel }: CreateAgentLoopProps) {
             <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button
             variant="outline"
             onClick={onCancel}
-            className="border-border/50 hover:bg-secondary/50"
+            className="w-full border-border/50 hover:bg-secondary/50 sm:w-auto"
           >
             Cancel
           </Button>
@@ -446,7 +446,7 @@ export function CreateAgentLoop({ onSuccess, onCancel }: CreateAgentLoopProps) {
         )}
 
         {/* AI Provider & Model */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="grid gap-2">
             <Label className="text-sm font-medium">AI Provider</Label>
             <Select
@@ -592,7 +592,7 @@ export function CreateAgentLoop({ onSuccess, onCancel }: CreateAgentLoopProps) {
         {/* Run Mode */}
         <div className="grid gap-2">
           <Label className="text-sm font-medium">Run Mode</Label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setRunMode("automatic")}
@@ -625,7 +625,7 @@ export function CreateAgentLoop({ onSuccess, onCancel }: CreateAgentLoopProps) {
         {/* Iterations (automatic mode only) */}
         {runMode === "automatic" && (
           <div className="grid gap-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Label htmlFor="iterations" className="text-sm font-medium">
                 Number of Iterations
               </Label>
@@ -655,19 +655,19 @@ export function CreateAgentLoop({ onSuccess, onCancel }: CreateAgentLoopProps) {
         )}
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button
           variant="outline"
           onClick={onCancel}
           disabled={isSubmitting}
-          className="border-border/50 hover:bg-secondary/50"
+          className="w-full border-border/50 hover:bg-secondary/50 sm:w-auto"
         >
           Cancel
         </Button>
         <Button
           onClick={handleSubmit}
           disabled={isSubmitting || !isValid}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
         >
           {isSubmitting ? (
             <>
