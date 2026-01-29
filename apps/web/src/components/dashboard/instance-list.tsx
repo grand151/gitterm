@@ -279,7 +279,7 @@ function InstanceCard({
   const isLocalPending = isPending && isLocal;
 
   // Generate the connect command for tunnel workspaces only
-  // Pending tunnel workspaces need the gitterm-agent connect command
+  // Pending tunnel workspaces need the gitterm connect command
   // Running tunnel workspaces can use opencode attach
   const connectCommand = isLocal
     ? isPending

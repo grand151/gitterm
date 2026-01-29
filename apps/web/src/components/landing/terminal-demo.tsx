@@ -89,7 +89,7 @@ function LocalTerminalDemo() {
         <div className="h-3 w-3 rounded-full bg-red-500/80" />
         <div className="h-3 w-3 rounded-full bg-yellow-500/80" />
         <div className="h-3 w-3 rounded-full bg-green-500/80" />
-        <span className="ml-3 text-xs text-muted-foreground font-mono">gitterm-agent — zsh</span>
+        <span className="ml-3 text-xs text-muted-foreground font-mono">gitterm CLI — zsh</span>
       </div>
       <div className="p-4 font-mono text-sm min-h-[260px]">
         {lines.map((line, i) => (

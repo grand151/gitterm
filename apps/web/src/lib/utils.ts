@@ -131,7 +131,7 @@ export function getAgentWsUrl(currentOrigin?: string): string | undefined {
 }
 
 /**
- * Build the `gitterm-agent connect` command.
+ * Build the `gitterm tunnel` command.
  * - Hosted: keep it minimal.
  * - Self-hosted: include `--ws-url` + `--server-url` so the agent knows where to connect.
  */
